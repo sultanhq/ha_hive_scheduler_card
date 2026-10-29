@@ -149,8 +149,8 @@ default_duration: 60
 ### Controls and safety
 
 1. Select a temperature from **5–32°C**, in **0.5°C** steps.
-2. Select **30, 60, 90, 120, 180 or 360 minutes**, or enter a custom
-   whole-minute duration from 1–360.
+2. Select **15, 30, 60, 90, 120, 180 or 360 minutes**, or enter a custom
+   whole-minute duration from 15–360.
 3. Select **Boost**, review the proposed temperature and duration, then
    **Confirm Boost**. Cancel/Back performs no write.
 4. The card sends **one unretained MQTT message** to
@@ -180,7 +180,7 @@ as **unconfirmed**, rather than encouraging repeated automatic writes.
 **Hardware acceptance:** The original scheduler has been hardware-tested.
 The Boost card's new set/stop behaviour requires separate acceptance testing
 on the actual Hive SLR1c + SLT3C setup, particularly the automatic return
-to timetable when the duration expires. Start with a short 5-minute boost and
+to timetable when the duration expires. Start with a 15-minute boost and
 verify the remote display, receiver feedback, expiry, and manual cancellation
 before relying on it for unattended heating. The SLR1c exposes only
 `off`, `auto` and `heat` system modes, unlike some older Hive variants
@@ -190,6 +190,6 @@ which document `emergency_heating`.
 
 Run `npm ci` and `npm run build`, then serve the checkout with `python3 -m http.server 8124 --bind 127.0.0.1`. Open [the mock preview](http://127.0.0.1:8124/test-component.html#boost-desktop) and scroll to the desktop/mobile Boost cards. This page has no Home Assistant connection and never writes hardware.
 
-The preview defaults to a five-minute boost. Select **Boost**, review and **Confirm Boost**, then try **Cancel Boost**. **Advance mock by 1 minute** tests receiver expiry without waiting in real time. The **Boost feedback** selector simulates retained-only feedback, wrong system mode, or no feedback; **Send room temperature only** demonstrates that unrelated updates cannot confirm a command. Switch back to normal feedback and use **Read mock receiver** for a fresh response.
+The preview defaults to a 15-minute boost. Select **Boost**, review and **Confirm Boost**, then try **Cancel Boost**. **Advance mock by 1 minute** tests receiver expiry without waiting in real time. The **Boost feedback** selector simulates retained-only feedback, wrong system mode, or no feedback; **Send room temperature only** demonstrates that unrelated updates cannot confirm a command. Switch back to normal feedback and use **Read mock receiver** for a fresh response.
 
 Verification requires fresh non-retained command fields: hold, finite duration, setpoint and `heat` mode for a start; cleared hold, zero duration and `auto` mode for cancellation. Cached display data cannot confirm either operation.

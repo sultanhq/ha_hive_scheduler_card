@@ -4,10 +4,11 @@
   const BASE = 'zigbee2mqtt';
   const MIN_TEMP = 5;
   const MAX_TEMP = 32;
+  const MIN_DURATION = 15;
   const MAX_DURATION = 360;
   const elapsed = (n) => n === 1 ? '1 minute' : `${n} minutes`;
   const validTemp = (n) => Number.isFinite(n) && n >= MIN_TEMP && n <= MAX_TEMP && Math.round(n * 2) === n * 2;
-  const validDuration = (n) => Number.isInteger(n) && n >= 1 && n <= MAX_DURATION;
+  const validDuration = (n) => Number.isInteger(n) && n >= MIN_DURATION && n <= MAX_DURATION;
   const validDevice = (n) => typeof n === 'string' && n.trim().length > 0 && n.length <= 256 && !/[+/#\x00-\x1f\x7f]/.test(n);
   const validEntity = (n) => typeof n === 'string' && /^climate\.[a-z0-9_]+$/.test(n);
   const holdEnabled = (v) => v === true || v === 1 || v === 'true' || v === '1';
@@ -69,7 +70,7 @@
       if (!validEntity(config.entity)) throw new Error('Select a valid climate entity.');
       if (!validDevice(config.mqtt_device)) throw new Error('Provide the exact Zigbee2MQTT friendly name (no /, +, # or control characters).');
       if (config.default_temperature !== undefined && !validTemp(Number(config.default_temperature))) throw new Error('Default temperature must be 5–32°C in 0.5°C steps.');
-      if (config.default_duration !== undefined && !validDuration(Number(config.default_duration))) throw new Error('Default duration must be 1–360 minutes.');
+      if (config.default_duration !== undefined && !validDuration(Number(config.default_duration))) throw new Error('Default duration must be 15–360 minutes.');
       this._resetSubscription();
       this._clearPending();
       this._config = { ...config };
@@ -182,7 +183,7 @@
     async _send(kind) {
       if (this._working || !this._config || !this._hass?.user?.is_admin || !this._subKey) return;
       if (kind === 'start' && (!validTemp(this._temp) || !validDuration(this._duration))) {
-        this._error = 'Choose a temperature from 5 to 32°C in 0.5°C steps and a duration from 1 to 360 minutes.';
+        this._error = 'Choose a temperature from 5 to 32°C in 0.5°C steps and a duration from 15 to 360 minutes.';
         this._render();
         return;
       }
@@ -249,7 +250,7 @@
         </ha-card>`;
       root.querySelector('#title').textContent = title;
       const badge = root.querySelector('#badge');
-      badge.textContent = hold === null ? 'State unknown' : hold ? 'Hold active' : 'Schedule running';
+      badge.textContent = hold === null ? 'State unknown' : hold ? 'Boost active' : 'Schedule running';
       badge.classList.toggle('active',!!hold);
       root.querySelector('#current').textContent = Number.isFinite(current)
         ? `Room temperature: ${current.toFixed(1)}°C` : 'Room temperature unavailable';
@@ -269,8 +270,8 @@
           <input id="temperature" type="range" min="5" max="32" step="0.5" aria-label="Boost temperature">
           <label for="duration">Boost duration</label>
           <div class="presets" id="presets"></div>
-          <div class="small">Or enter minutes (1–360)</div>
-          <input id="duration" type="number" min="1" max="360" step="1" aria-label="Boost duration in minutes">
+          <div class="small">Or enter minutes (15–360)</div>
+          <input id="duration" type="number" min="${MIN_DURATION}" max="360" step="1" aria-label="Boost duration in minutes">
           <div id="receiver" class="notice" hidden></div>
           <div class="actions">
             <button class="primary" id="boost" ${enabled ? '' : 'disabled'}>Boost</button>
@@ -288,10 +289,10 @@
         duration.addEventListener('change',event => {
           const value = Number(event.target.value);
           if (validDuration(value)) { this._duration = value; this._error = ''; }
-          else { this._error = 'Duration must be an integer between 1 and 360 minutes.'; }
+          else { this._error = 'Duration must be an integer between 15 and 360 minutes.'; }
           this._render();
         });
-        for (const value of [30,60,90,120,180,360]) {
+        for (const value of [MIN_DURATION,30,60,90,120,180,360]) {
           const button = document.createElement('button');
           button.textContent = `${value}m`;
           button.classList.toggle('selected',this._duration === value);
@@ -355,7 +356,7 @@
       <small>Use the exact receiver name, including spaces and spelling.</small>
       <label for="name">Card title (optional)</label><input id="name" placeholder="Hive Boost">
       <label for="temp">Default temperature (5–32°C)</label><input id="temp" type="number" step=".5" min="5" max="32">
-      <label for="duration">Default duration in minutes (1–360)</label><input id="duration" type="number" min="1" max="360">`;
+      <label for="duration">Default duration in minutes (15–360)</label><input id="duration" type="number" min="${MIN_DURATION}" max="360">`;
       const entities = Object.keys(this._hass?.states || {}).filter(id=>id.startsWith('climate.'));
       const select = root.querySelector('#entity');
       const all = new Set([this._config.entity,...entities].filter(Boolean));

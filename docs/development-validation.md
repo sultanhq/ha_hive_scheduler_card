@@ -62,9 +62,11 @@ The two remaining low findings are the build-only `@rollup/plugin-node-resolve` 
 The boost PR adds a second card in the same JavaScript resource. Two review findings were reproduced and fixed: cached/retained display state cannot supply command confirmation fields, and receiver mode must match the requested `heat` or `auto` mode. Pending verification is abandoned on reconfiguration.
 
 - Nine new regression cases failed against the original implementation and pass with the fixes.
-- All 439 tests pass across 13 files; `npm ci`, TypeScript and the build pass.
+- All 444 tests pass across 13 files; `npm ci`, TypeScript and the build pass.
 - Repeated builds exit normally and reproduce the same JavaScript hash.
 - The compiled local preview passes start/confirm, cancellation, simulated expiry, retained plus room-only feedback rejection, fresh read-back and wrong-mode rejection checks. Weekly schedules stay unchanged.
-- The local preview includes desktop and mobile Boost cards, with feedback controls and manual mock minute advancement. Both layouts were inspected in Chrome; a five-minute mock boost and verified cancellation were exercised through the browser. It has no Home Assistant connection or hardware writes.
+- The local preview includes desktop and mobile Boost cards, with feedback controls and manual mock minute advancement. Both layouts were inspected in Chrome; a mock boost and verified cancellation were exercised through the browser. It has no Home Assistant connection or hardware writes.
 
 The original scheduler’s hardware acceptance remains complete. Boost start, cancellation, real receiver expiry and physical remote behaviour still require their own hardware acceptance; local mocks do not establish those results.
+
+New Boost commands now require 15–360 whole minutes, including configured defaults and custom input. The receiver’s remaining countdown may fall below 15 minutes and is still displayed and verified normally. The active status reads “Boost active”, and the preview defaults to 15 minutes.

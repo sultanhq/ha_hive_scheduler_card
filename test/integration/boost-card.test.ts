@@ -118,7 +118,7 @@ describe('Hive Boost Card in same HACS resource', () => {
     emit({ temperature_setpoint_hold: true, temperature_setpoint_hold_duration: 60, occupied_heating_setpoint: 21, system_mode: 'heat' });
     // Assert: receiver verification changes the status.
     expect(card.shadowRoot.textContent).toContain('Boost confirmed by receiver');
-    expect(card.shadowRoot.querySelector('#badge').textContent).toContain('Hold active');
+    expect(card.shadowRoot.querySelector('#badge').textContent).toContain('Boost active');
   });
 
   it.each([false, true])('does not confirm from pre-command cached settings (retained: %s) and a fresh room temperature', async retained => {
@@ -210,19 +210,34 @@ describe('Hive Boost Card in same HACS resource', () => {
     });
   });
 
-  it('rejects invalid and indefinite durations', async () => {
+  it('offers a 15-minute minimum boost and accepts a shorter remaining countdown', async () => {
+    const { card, click, emit, writes, flush } = await mount();
+    const input = card.shadowRoot.querySelector('#duration') as HTMLInputElement;
+    expect(input.min).toBe('15');
+    const preset = [...card.shadowRoot.querySelectorAll('#presets button')].find((button: any) => button.textContent === '15m') as HTMLButtonElement;
+    expect(preset).toBeTruthy(); preset.click();
+    click('#boost');
+    expect(card.shadowRoot.querySelector('#summary').textContent).toContain('15 minutes');
+    click('#confirm'); await flush();
+    expect(JSON.parse(String(writes()[0].data.payload)).temperature_setpoint_hold_duration).toBe(15);
+    emit({ temperature_setpoint_hold:true, temperature_setpoint_hold_duration:14, occupied_heating_setpoint:21, system_mode:'heat' });
+    expect(card.shadowRoot.textContent).toContain('Boost confirmed by receiver');
+    expect(card.shadowRoot.querySelector('#badge').textContent).toBe('Boost active');
+  });
+
+  it.each([1, 5, 14, 14.5, 65535])('rejects invalid or below-minimum duration %s', async value => {
     // Arrange: a receiver is connected and the duration input is available.
     const { card, writes } = await mount();
     const input = card.shadowRoot.querySelector('#duration') as HTMLInputElement;
     // Act: enter the not-used sentinel value.
-    input.value = '65535';
+    input.value = String(value);
     input.dispatchEvent(new Event('change'));
     // Assert: the request is rejected before sending a command.
     expect(card.shadowRoot.textContent).toContain('Duration must be');
     expect(writes()).toHaveLength(0);
     expect(() => card.setConfig({
-      type: 'custom:hive-boost-card', entity: 'climate.hive_reciever', mqtt_device: 'Hive Reciever', default_duration: 65535,
-    })).toThrow('1–360');
+      type: 'custom:hive-boost-card', entity: 'climate.hive_reciever', mqtt_device: 'Hive Reciever', default_duration: value,
+    })).toThrow('15–360');
   });
 
   it('disables the write controls for non-admin users', async () => {

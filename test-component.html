@@ -82,7 +82,7 @@ let hass = {
   }
 };
 for (const [i, card] of schedulerCards.entries()) card.setConfig({type:'custom:hive-scheduler-card', entity:'climate.hive_example', mqtt_device:'Hive Reciever', name:i?'Hive Heating · narrow graph':'Hive Heating · week', view_mode:i?'graph':'week', schedule_entities:entities});
-for (const [i, card] of boostCards.entries()) card.setConfig({type:'custom:hive-boost-card', entity:'climate.hive_example', mqtt_device:'Hive Reciever', name:i?'Hive Boost · mobile':'Hive Boost · desktop', default_temperature:21, default_duration:5});
+for (const [i, card] of boostCards.entries()) card.setConfig({type:'custom:hive-boost-card', entity:'climate.hive_example', mqtt_device:'Hive Reciever', name:i?'Hive Boost · mobile':'Hive Boost · desktop', default_temperature:21, default_duration:15});
 for (const card of cards) card.hass = hass;
 document.querySelector('#mobile').onclick = () => document.querySelector('#cards').classList.toggle('mobile');
 document.querySelector('#viewer').onclick = () => {hass = {...hass, user:{is_admin:!hass.user.is_admin}}; for (const card of cards) card.hass = hass;};
