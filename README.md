@@ -122,3 +122,66 @@ Tag-triggered release automation creates **draft releases only**. Optional inher
 See [development validation](docs/development-validation.md) for baseline results, dependency findings, and hardware status.
 
 For inclusion in HACS’s default catalogue, see the [submission guide](docs/hacs-submission.md). Custom-repository installation already works; default inclusion also requires a published GitHub release and a PR to `hacs/default`.
+
+
+## Hive Boost Card (second HACS dashboard card)
+
+The HACS installation includes **two separate Lovelace card types** in the same
+`hive-scheduler-card.js` resource:
+
+- `custom:hive-scheduler-card`: edit the native seven-day timetable.
+- `custom:hive-boost-card`: temporarily override the heating setpoint.
+
+After updating the HACS dashboard package, reload the Home Assistant frontend
+and select **Hive Boost Card** in the Add Card dialog. Use the visual editor to
+choose your climate entity and the exact Zigbee2MQTT receiver friendly name.
+The boost card does **not** require the seven schedule text entities.
+
+```yaml
+type: custom:hive-boost-card
+entity: climate.hive_reciever  # select the actual climate entity
+mqtt_device: "Hive Reciever"  # exact Zigbee2MQTT friendly name
+name: Heating Boost
+default_temperature: 21
+default_duration: 60
+```
+
+### Controls and safety
+
+1. Select a temperature from **5–32°C**, in **0.5°C** steps.
+2. Select **30, 60, 90, 120, 180 or 360 minutes**, or enter a custom
+   whole-minute duration from 1–360.
+3. Select **Boost**, review the proposed temperature and duration, then
+   **Confirm Boost**. Cancel/Back performs no write.
+4. The card sends **one unretained MQTT message** to
+   `zigbee2mqtt/<FRIENDLY_NAME>/set` containing the four receiver fields:
+   ```json
+   {"system_mode":"heat","occupied_heating_setpoint":21,"temperature_setpoint_hold_duration":60,"temperature_setpoint_hold":true}
+   ```
+5. The card waits for non-retained receiver feedback to report that the hold
+   and setpoint agree with the request. A publish acknowledgment alone
+   is **not** displayed as success.
+6. While a hold is active, **Cancel Boost** sends
+   ```json
+   {"system_mode":"auto","temperature_setpoint_hold_duration":0,"temperature_setpoint_hold":false}
+   ```
+   to release the hold and return to automatic scheduling.
+
+The Boost card never changes `schedule_monday` through `schedule_sunday`.
+The finite hold duration is stored in the receiver, not a browser countdown.
+An existing manual/indefinite hold is shown as such rather than mislabelled as
+a timed boost. The sentinel **65535 is never used for a new Boost**.
+
+Like schedule editing, receiver control needs a Home Assistant administrator
+and a working MQTT integration. The Boost card also needs live Zigbee2MQTT
+state messages to verify a change. A failure to receive feedback is reported
+as **unconfirmed**, rather than encouraging repeated automatic writes.
+
+**Hardware acceptance:** The original scheduler has been hardware-tested.
+The Boost card's new set/stop behaviour requires separate acceptance testing
+on the actual Hive SLR1c + SLT3C setup, particularly the automatic return
+to timetable when the duration expires. Start with a short 5-minute boost and
+verify the remote display, receiver feedback, expiry, and manual cancellation
+before relying on it for unattended heating. The SLR1c exposes only
+`off`, `auto` and `heat` system modes, unlike some older Hive variants
+which document `emergency_heating`.
