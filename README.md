@@ -2,6 +2,8 @@
 
 A Home Assistant dashboard card for the **native heating schedule stored on a Hive SLR1c receiver**, through Zigbee2MQTT. The receiver executes the timetable; Home Assistant provides the editor and MQTT transport. No custom integration or Schedule Helper is required.
 
+![Schedule edits pass through Zigbee2MQTT; the Hive receiver stores and executes the timetable, with fresh read-back confirming saves.](docs/hive-schedule-flow.svg)
+
 Derived from [abaddon's Sonoff TRVZB Scheduler Card](https://github.com/abaddon/ha_sonoff_TRVZB_scheduler_card). The original MIT licence and Copyright (c) 2024 abaddon are preserved in [LICENSE](LICENSE) and the compiled card.
 
 ## Requirements and validation status
