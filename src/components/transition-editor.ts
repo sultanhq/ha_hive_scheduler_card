@@ -531,8 +531,8 @@ export class TransitionEditor extends LitElement {
                 <button
                   class="button-icon remove"
                   @click=${this._handleDelete}
-                  title="Delete transition"
-                  aria-label="Delete transition ${this.index + 1}"
+                  title="Delete schedule point"
+                  aria-label="Delete schedule point ${this.index + 1}"
                 >
                   <svg
                     width="16"

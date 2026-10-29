@@ -87,6 +87,29 @@ describe('Hive UI regressions', () => {
     expect(graph.shadowRoot.querySelector('.carry-over-note')).toBeNull();
   });
 
+  it('places time and temperature labels beside vertical steps and keeps late-day labels inside the graph', async () => {
+    const { root } = await mount('graph');
+    const graph = root.querySelector('hive-schedule-graph-view') as any;
+    graph.schedule = { ...graph.schedule, monday: { transitions: [
+      { time: '06:07', temperature: 20.5 }, { time: '12:00', temperature: 12 }, { time: '23:59', temperature: 1 }
+    ] } };
+    await tick(graph);
+    const groups = [...graph.shadowRoot.querySelectorAll('.point-group')] as SVGGElement[];
+    for (const [index, group] of groups.entries()) {
+      const pointX = Number(group.querySelector('circle')!.getAttribute('cx'));
+      const labels = [...group.querySelectorAll('.point-label')];
+      for (const label of labels) {
+        const labelX = Number(label.getAttribute('x'));
+        expect(index === 2 ? labelX < pointX : labelX > pointX).toBe(true);
+        expect(label.getAttribute('text-anchor')).toBe(index === 2 ? 'end' : 'start');
+      }
+    }
+    expect(groups[0].querySelector('.time-label')!.textContent).toContain('06:07');
+    expect(groups[2].querySelector('.time-label')!.textContent).toContain('23:59');
+    const offPointY = Number(groups[2].querySelector('circle')!.getAttribute('cy'));
+    expect(Number(groups[2].querySelector('.time-label')!.getAttribute('y'))).toBeLessThan(offPointY);
+  });
+
   it.each([1, 12, 32])('provides Sunday’s final %s°C setting on hover at the start of Monday', async temperature => {
     const { root } = await mount('graph');
     const graph = root.querySelector('hive-schedule-graph-view') as any;

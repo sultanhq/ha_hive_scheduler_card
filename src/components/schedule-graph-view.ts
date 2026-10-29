@@ -143,6 +143,10 @@ export class ScheduleGraphView extends LitElement {
         fill: var(--primary-text-color, #333333);
         font-size: 10px;
         font-weight: 600;
+        paint-order: stroke fill;
+        stroke: var(--card-background-color, #ffffff);
+        stroke-width: 4px;
+        stroke-linejoin: round;
         pointer-events: none;
         font-family: var(--paper-font-body1_-_font-family, Arial, sans-serif);
       }
@@ -733,7 +737,7 @@ export class ScheduleGraphView extends LitElement {
       ? `M ${this.hourToX(0, width)},${this.tempToY(carryOver.temperature, height)} L ${this.hourToX(this.timeToHours(carryOver.until), width)},${this.tempToY(carryOver.temperature, height)} L ${this.hourToX(this.timeToHours(carryOver.until), width)},${this.tempToY(transitions[0].temperature, height)}`
       : '';
     const inferredDescription = carryOver
-      ? `00:00–${carryOver.until}: ${carryOver.temperature === 1 ? 'Heating off (1°C)' : `${carryOver.temperature}°C`} · carried over from ${carryOver.day.charAt(0).toUpperCase() + carryOver.day.slice(1)}. Display only; not a stored transition.`
+      ? `00:00–${carryOver.until}: ${carryOver.temperature === 1 ? 'Heating off (1°C)' : `${carryOver.temperature}°C`} · carried over from ${carryOver.day.charAt(0).toUpperCase() + carryOver.day.slice(1)}. Display only; not a stored schedule point.`
       : '';
     const inferred = carryOver
       ? svg`
@@ -775,6 +779,11 @@ export class ScheduleGraphView extends LitElement {
       const y = this.tempToY(transition.temperature, height);
       const color = getTemperatureColor(transition.temperature);
       const isDragging = this.draggingPoint === index;
+      // Keep labels beside the vertical step, with room at the chart's right edge.
+      const labelOnLeft = x + 64 > width - this.CHART_PADDING.right;
+      const labelX = x + (labelOnLeft ? -16 : 16);
+      const labelAnchor = labelOnLeft ? 'end' : 'start';
+      const labelsAbove = y + 28 > height - this.CHART_PADDING.bottom;
 
       return svg`
         <g
@@ -792,18 +801,18 @@ export class ScheduleGraphView extends LitElement {
             stroke-width="${isDragging ? 4 : 2}"
           />
           <text
-            class="point-label"
-            x="${x}"
-            y="${y - 12}"
-            text-anchor="middle"
+            class="point-label temperature-label"
+            x="${labelX}"
+            y="${y - (labelsAbove ? 30 : 12)}"
+            text-anchor=${labelAnchor}
           >
             ${transition.temperature}°C
           </text>
           <text
-            class="point-label"
-            x="${x}"
-            y="${y + 20}"
-            text-anchor="middle"
+            class="point-label time-label"
+            x="${labelX}"
+            y="${y + (labelsAbove ? -12 : 20)}"
+            text-anchor=${labelAnchor}
             fill="var(--secondary-text-color, #666666)"
           >
             ${transition.time}
@@ -854,9 +863,9 @@ export class ScheduleGraphView extends LitElement {
           class="action-button"
           @click="${this.addTransition}"
           ?disabled="${!canAdd || this.disabled}"
-          title="${canAdd ? 'Add new temperature transition' : 'Maximum 6 transitions per day'}"
+          title="${canAdd ? 'Add a time and temperature' : 'Maximum 6 schedule points per day'}"
         >
-          + Add Transition
+          + Add schedule point
         </button>
         <button
           class="action-button secondary"

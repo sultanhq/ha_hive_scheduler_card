@@ -421,9 +421,9 @@ export class DayScheduleEditor extends LitElement {
                   class="button button-primary"
                   ?disabled=${!canAddTransition}
                   @click=${this._addTransition}
-                  title=${canAddTransition ? 'Add new transition' : 'Maximum 6 transitions per day'}
+                  title=${canAddTransition ? 'Add a time and temperature' : 'Maximum 6 schedule points per day'}
                 >
-                  + Add Transition
+                  + Add schedule point
                 </button>
                 <button
                   class="button button-secondary"
