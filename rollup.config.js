@@ -47,7 +47,7 @@ export default {
       generateBundle(_options, bundle) {
         const output = bundle['hive-scheduler-card.js'];
         if (!output || output.type !== 'chunk') throw new Error('HACS bundle missing');
-        output.code += '\\n' + readFileSync(new URL('./src/boost-card.js', import.meta.url), 'utf8');
+        output.code += '\n' + readFileSync(new URL('./src/boost-card.js', import.meta.url), 'utf8');
       }
     }
   ].filter(Boolean)
