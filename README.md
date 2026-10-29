@@ -193,3 +193,26 @@ Run `npm ci` and `npm run build`, then serve the checkout with `python3 -m http.
 The preview defaults to a 15-minute boost. Select **Boost**, review and **Confirm Boost**, then try **Cancel Boost**. **Advance mock by 1 minute** tests receiver expiry without waiting in real time. The **Boost feedback** selector simulates retained-only feedback, wrong system mode, or no feedback; **Send room temperature only** demonstrates that unrelated updates cannot confirm a command. Switch back to normal feedback and use **Read mock receiver** for a fresh response.
 
 Verification requires fresh non-retained command fields: hold, finite duration, setpoint and `heat` mode for a start; cleared hold, zero duration and `auto` mode for cancellation. Cached display data cannot confirm either operation.
+
+## Hive Boost Badge
+
+Use **Hive Boost Badge** in the dashboard’s **Add badge** picker to place Boost at the top of a view. It uses the same `hive-scheduler-card.js` resource as the scheduler and Boost card; no second resource is needed. After updating through HACS, refresh the browser to load the new badge type.
+
+The compact badge shows room temperature while idle, **Boost active** and the receiver’s remaining minutes during a timed boost, and **Verifying…** while a command is pending. Tap it to open the existing Boost controls. Opening or closing the popup does not send a heating command; starting a boost still requires **Boost → Confirm Boost**. Closing the popup while verification is pending lets verification finish in the background.
+
+Configure it with the same climate entity and exact MQTT receiver name as the Boost card:
+
+```yaml
+badges:
+  - type: custom:hive-boost-badge
+    entity: climate.hive_reciever
+    mqtt_device: "Hive Reciever"
+    name: Heating
+    default_duration: 30
+```
+
+The visual editor supports the same settings, including the 15-minute minimum and fallback temperature. The initial suggestion remains room temperature +1°C, rounded up within 5–32°C. Receiver countdowns below 15 minutes are displayed normally. Viewers can see room temperature and open read-only controls; MQTT subscriptions and Boost commands require an administrator.
+
+Close the popup using its close button, Escape, or the backdrop. The badge follows the dashboard theme and supports keyboard focus. The [local mock preview](http://127.0.0.1:8124/test-component.html#badges) includes the badge alongside both cards and the simulated feedback/expiry controls.
+
+Home Assistant references: [custom badges](https://contributors.home-assistant.io/frontend/custom-ui/badge/), [dashboard badges](https://www.home-assistant.io/dashboards/badges/).

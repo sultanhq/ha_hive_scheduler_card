@@ -11,6 +11,7 @@ main { max-width:1050px; margin:auto; } ha-card { display:block; background:whit
 <label>Boost feedback <select id="feedback"><option value="normal">Normal confirmation</option><option value="retained">Retained only</option><option value="mismatch">Wrong system mode</option><option value="silent">No feedback</option></select></label>
 <button id="room">Send room temperature only</button><button id="read">Read mock receiver</button><button id="advance">Advance mock by 1 minute</button>
 </div>
+<h2>Dashboard badges</h2><div id="badges" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px"><hive-boost-badge id="boost-badge"></hive-boost-badge></div>
 <section id="cards"><hive-scheduler-card id="week"></hive-scheduler-card><div class="mobile"><hive-scheduler-card id="graph"></hive-scheduler-card></div><h2>Boost · desktop</h2><div class="boost-preview"><hive-boost-card id="boost-desktop"></hive-boost-card></div><h2>Boost · mobile</h2><div class="mobile"><hive-boost-card id="boost-mobile"></hive-boost-card></div></section>
 <pre id="messages" aria-live="polite"></pre>
 </main><script type="module">
@@ -19,7 +20,8 @@ const days = ['sunday','monday','tuesday','wednesday','thursday','friday','satur
 const entities = Object.fromEntries(days.map(day => [day, `text.renamed_${day}`]));
 const schedulerCards = [...document.querySelectorAll('hive-scheduler-card')];
 const boostCards = [...document.querySelectorAll('hive-boost-card')];
-const cards = [...schedulerCards, ...boostCards];
+const boostBadges = [...document.querySelectorAll('hive-boost-badge')];
+const cards = [...schedulerCards, ...boostCards, ...boostBadges];
 const topic = 'zigbee2mqtt/Hive Reciever';
 const states = { 'climate.hive_example': { entity_id:'climate.hive_example', state:'auto', attributes:{friendly_name:'Hive Heating', current_temperature:20.5, temperature:20.5} } };
 for (const day of days) states[entities[day]] = {entity_id:entities[day], state:'06:07/20.5 19:31/1 19:31/1 19:31/1 19:31/1 19:31/1', attributes:{}};
@@ -83,6 +85,7 @@ let hass = {
 };
 for (const [i, card] of schedulerCards.entries()) card.setConfig({type:'custom:hive-scheduler-card', entity:'climate.hive_example', mqtt_device:'Hive Reciever', name:i?'Hive Heating · narrow graph':'Hive Heating · week', view_mode:i?'graph':'week', schedule_entities:entities});
 for (const [i, card] of boostCards.entries()) card.setConfig({type:'custom:hive-boost-card', entity:'climate.hive_example', mqtt_device:'Hive Reciever', name:i?'Hive Boost · mobile':'Hive Boost · desktop', default_temperature:21, default_duration:15});
+for (const badge of boostBadges) badge.setConfig({type:'custom:hive-boost-badge',entity:'climate.hive_example',mqtt_device:'Hive Reciever',name:'Heating',default_duration:15});
 for (const card of cards) card.hass = hass;
 document.querySelector('#mobile').onclick = () => document.querySelector('#cards').classList.toggle('mobile');
 document.querySelector('#viewer').onclick = () => {hass = {...hass, user:{is_admin:!hass.user.is_admin}}; for (const card of cards) card.hass = hass;};

@@ -72,3 +72,14 @@ The original scheduler’s hardware acceptance remains complete. Boost start, ca
 New Boost commands now require 15–360 whole minutes, including configured defaults and custom input. The receiver’s remaining countdown may fall below 15 minutes and is still displayed and verified normally. The active status reads “Boost active”, and the preview defaults to 15 minutes.
 
 The Boost suggestion now starts at room temperature +1°C, rounds upward to a half-degree step, and clamps to 5–32°C. Live HA and MQTT room updates refresh an untouched suggestion; unchanged HA values do not overwrite a newer MQTT reading. Slider edits and confirmation/pending commands retain their selected target. Missing or invalid room readings use the configured fallback. Added coverage includes source updates, boundaries, unavailable readings, manual edits and confirmation stability; a compiled-preview smoke check verifies the suggested and published temperatures.
+
+## Dashboard badge implementation — 29 October 2026
+
+`custom:hive-boost-badge` is registered in Home Assistant’s badge picker and packaged in the existing HACS resource. It reuses the Boost controller and a stable native dialog with the existing controls. A dedicated editor preserves the badge configuration type. Viewer accounts can read room temperature and open disabled controls without calling the administrator-only MQTT subscription endpoint.
+
+- All 479 tests pass across 14 files, including badge registration/editor, no-write taps, fresh verification, countdowns below 15 minutes, cancellation, dialog stability/focus, close/Escape/backdrop handling, viewers/unavailable entities and cleanup.
+- TypeScript and the production build pass; repeated builds exit normally, reproduce the artifact and retain the original MIT notice.
+- The compiled mock preview passes badge registration, room +1°C suggestion, popup stability, verified start/cancel, a 14-minute countdown and preservation of weekly schedules.
+- Chrome inspection covers the compact pill, native popup, keyboard Enter/Escape and focus restoration, mock start and cancellation, and a narrow browser layout. The popup header stays visible while scrolling short viewports.
+
+No physical-device commands were issued during this work. The badge shares the Boost protocol; the previously documented separate Boost hardware acceptance remains pending.
