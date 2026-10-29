@@ -66,14 +66,21 @@ describe('Hive UI regressions', () => {
     const { root } = await mount('graph');
     const graph = root.querySelector('hive-schedule-graph-view') as any;
     graph.schedule = { ...graph.schedule, monday: { transitions: [
-      { time: '06:07', temperature: 32 }, { time: '12:00', temperature: 18 }, { time: '19:31', temperature: 1 }
+      { time: '06:07', temperature: 19.5 }, { time: '08:00', temperature: 20 },
+      { time: '10:00', temperature: 20.5 }, { time: '12:00', temperature: 32 },
+      { time: '16:00', temperature: 19 }, { time: '19:31', temperature: 1 }
     ] } };
     await tick(graph);
     const segments = [...graph.shadowRoot.querySelectorAll('.temperature-line')] as SVGPathElement[];
     const points = [...graph.shadowRoot.querySelectorAll('.temperature-point')] as SVGCircleElement[];
-    expect(segments).toHaveLength(3);
+    expect(segments).toHaveLength(6);
     expect(segments.map(segment => segment.getAttribute('stroke'))).toEqual(points.map(point => point.getAttribute('fill')));
-    expect(new Set(segments.map(segment => segment.getAttribute('stroke'))).size).toBe(3);
+    expect(new Set(segments.map(segment => segment.getAttribute('stroke'))).size).toBe(6);
+    for (const point of points.slice(0, 4)) {
+      const [red, green, blue] = point.getAttribute('fill')!.match(/\d+/g)!.map(Number);
+      expect(red).toBeGreaterThan(green * 2);
+      expect(red).toBeGreaterThan(blue * 2);
+    }
   });
 
   it('uses the off point colour for the carried-over off period and its open start marker', async () => {

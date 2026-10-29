@@ -1,34 +1,18 @@
 import { css } from 'lit';
 
 /**
- * Temperature color gradient function
- * Maps temperature from 1°C off (blue) to 32°C (red)
- * with a smooth transition through green at ~20°C
+ * Shared temperature palette: cool blue through green up to 19°C,
+ * then coral red through deeper red for warmer heating settings.
  */
 export function getTemperatureColor(temp: number): string {
-  // Clamp temperature to valid range
   const clampedTemp = Math.max(1, Math.min(32, temp));
-
-  // Normalize temperature to 0-1 range
-  const normalized = Math.max(0, Math.min(1, (clampedTemp - 14) / (22 - 14)));
-
-  let r: number, g: number, b: number;
-
-  if (normalized < 0.5) {
-    // Blue (1°C) to Green (19.5°C)
-    const t = normalized * 2; // 0-1 for first half
-    r = Math.round(0 + (100 - 0) * t);
-    g = Math.round(150 + (200 - 150) * t);
-    b = Math.round(255 + (50 - 255) * t);
-  } else {
-    // Green (19.5°C) to Red (32°C)
-    const t = (normalized - 0.5) * 2; // 0-1 for second half
-    r = Math.round(100 + (255 - 100) * t);
-    g = Math.round(200 + (80 - 200) * t);
-    b = Math.round(50 + (20 - 50) * t);
+  if (clampedTemp > 19) {
+    const t = (clampedTemp - 19) / (32 - 19);
+    return `rgb(${Math.round(239 - 28 * t)}, ${Math.round(83 - 36 * t)}, ${Math.round(80 - 33 * t)})`;
   }
 
-  return `rgb(${r}, ${g}, ${b})`;
+  const t = Math.max(0, (clampedTemp - 14) / (19 - 14));
+  return `rgb(${Math.round(100 * t)}, ${Math.round(150 + 50 * t)}, ${Math.round(255 - 205 * t)})`;
 }
 
 /**

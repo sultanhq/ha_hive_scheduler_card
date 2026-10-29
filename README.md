@@ -67,7 +67,7 @@ Overrides may be partial; discovery resolves the remainder. Each day needs a dif
 
 ## Editing and verified saving
 
-Click a day to edit schedule points, or drag stored graph points. Each schedule point sets a temperature from a particular time. The first point is editable and deletable; retain at least one point. Choose **Heating off (1°C)** for an off period. Graph lines use the same temperature colours as their points and the timetable, including the dashed overnight period. Labels sit beside graph steps, with a background outline to keep crossing lines clear of the text. Use **Copy to Other Days** to copy a day's schedule.
+Click a day to edit schedule points, or drag stored graph points. Each schedule point sets a temperature from a particular time. The first point is editable and deletable; retain at least one point. Choose **Heating off (1°C)** for an off period. Graph lines use the same temperature colours as their points and the timetable, including the dashed overnight period. Temperatures above 19°C use red shades; cooler settings use green and blue. Labels sit beside graph steps, with a background outline to keep crossing lines clear of the text. Use **Copy to Other Days** to copy a day's schedule.
 
 Schedules may begin after midnight. A dashed graph segment before the first schedule point shows the previous day's final temperature, including weekly wraparound. Hover over this segment or its open start marker to see the temperature, time interval, and previous day—for example, “00:00–06:00: Heating off (1°C), carried over from Sunday”. It has no editable point and is never written. Identical duplicate padding is collapsed; different schedule times with equal temperatures remain distinct.
 
