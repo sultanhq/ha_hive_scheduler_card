@@ -21,7 +21,7 @@ The card's complete read/edit/write/read-back and physical-remote acceptance rem
 ## Hive implementation validation
 
 - `npm ci`: completed with the existing lockfile dependency versions.
-- `npm test`: 413 tests passed across 12 files.
+- `npm test`: 419 tests passed across 12 files.
 - `npm run typecheck`: passed.
 - `npm run build`: exits zero; two production builds produce the same JavaScript hash.
 - The 110 KB bundle includes the full original MIT notice. Licence comments survive minification.
@@ -30,3 +30,7 @@ The card's complete read/edit/write/read-back and physical-remote acceptance rem
 - Production compilation uses non-watching TypeScript sys hooks to avoid inherited compiler watchers keeping Node 24 alive after bundle creation. Development watch mode retains real watchers.
 
 Hardware acceptance remains pending. Installation and the backup/edit/read-back/remote-confirmation/restore procedure are documented in README.md.
+
+## Start-of-day graph follow-up
+
+The carried-over temperature is labelled above the chart and drawn with a non-scaling dashed line and a non-editable start marker. The inferred period includes the rise/fall to the first native transition. Tests cover previous-day off/heating values, weekly wraparound, explicit midnight transitions, absent previous-day data, and a verified save with no synthetic midnight payload. The 1°C label and line were inspected in the narrow Chrome mock preview.

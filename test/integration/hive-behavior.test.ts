@@ -50,6 +50,7 @@ describe('Hive UI regressions', () => {
     const sun = [...graph.shadowRoot.querySelectorAll('button')].find((button: any) => button.textContent.trim() === 'Sun') as HTMLButtonElement;
     sun.click(); await tick(graph);
     expect(graph.shadowRoot.querySelector('.inferred-line').textContent).toContain('saturday');
+    expect(graph.shadowRoot.querySelector('.carry-over-note').textContent).toContain('carried over from Saturday');
     expect(graph.schedule.sunday.transitions[0].time).toBe('06:07');
     expect(card.shadowRoot!.querySelector('.save-button')!.hasAttribute('disabled')).toBe(true);
   });
@@ -59,6 +60,59 @@ describe('Hive UI regressions', () => {
     graph.schedule = { ...graph.schedule, monday: { transitions: [{ time: '06:00', temperature: 1 }] }, sunday: { transitions: [{ time: '06:00', temperature: 32 }] } };
     await tick(graph); expect(graph.getTempRange()).toEqual({ min: 1, max: 32 });
     expect(graph.schedule.monday.transitions).toHaveLength(1); expect(card).toBeTruthy();
+  });
+
+  it.each([1, 12, 32])('labels the start of Monday with Sunday’s final %s°C setting', async temperature => {
+    const { root } = await mount('graph');
+    const graph = root.querySelector('hive-schedule-graph-view') as any;
+    graph.schedule = {
+      ...graph.schedule,
+      sunday: { transitions: [{ time: '06:00', temperature: 20 }, { time: '22:00', temperature }] }
+    };
+    const before = serializeDaySchedule(graph.schedule.monday);
+    await tick(graph);
+    const note = graph.shadowRoot.querySelector('.carry-over-note').textContent;
+    expect(note).toContain('00:00–06:07');
+    expect(note).toContain(temperature === 1 ? 'Heating off (1°C)' : `${temperature}°C`);
+    expect(note).toContain('carried over from Sunday');
+    expect(note).toContain('Display only');
+    expect(graph.shadowRoot.querySelector('.inferred-start').closest('.point-group')).toBeNull();
+    expect(graph.shadowRoot.querySelectorAll('.point-group')).toHaveLength(2);
+    expect(serializeDaySchedule(graph.schedule.monday)).toBe(before);
+  });
+
+  it('does not infer a start value when a native midnight transition exists', async () => {
+    const { root } = await mount('graph');
+    const graph = root.querySelector('hive-schedule-graph-view') as any;
+    graph.schedule = { ...graph.schedule, monday: { transitions: [{ time: '00:00', temperature: 12 }, { time: '06:00', temperature: 20 }] } };
+    await tick(graph);
+    expect(graph.shadowRoot.querySelector('.carry-over-note')).toBeNull();
+    expect(graph.shadowRoot.querySelector('.inferred-start')).toBeNull();
+    expect(graph.shadowRoot.querySelector('.inferred-line')).toBeNull();
+    expect(graph.shadowRoot.querySelectorAll('.point-group')).toHaveLength(2);
+  });
+
+  it('does not invent a start value if the previous schedule is missing', async () => {
+    const { root } = await mount('graph');
+    const graph = root.querySelector('hive-schedule-graph-view') as any;
+    graph.schedule = { ...graph.schedule, sunday: { transitions: [] } };
+    await tick(graph);
+    expect(graph.shadowRoot.querySelector('.carry-over-note')).toBeNull();
+    expect(graph.shadowRoot.querySelector('.inferred-start')).toBeNull();
+    expect(graph.schedule.monday.transitions[0].time).toBe('06:07');
+  });
+
+  it('saves only native transitions after displaying the carried-over off period', async () => {
+    const { card, scenario, root } = await mount('graph');
+    const graph = root.querySelector('hive-schedule-graph-view') as any;
+    await tick(graph);
+    expect(graph.shadowRoot.querySelector('.carry-over-note').textContent).toContain('Heating off (1°C)');
+    event(graph, 'schedule-changed', { day: 'monday', schedule: { transitions: [{ time: '06:07', temperature: 21 }, { time: '19:31', temperature: 1 }] } });
+    await tick(card);
+    await (card as any)._saveSchedule();
+    const writes = scenario.recorder.calls.filter(call => String(call.data.topic).endsWith('/set'));
+    expect(writes).toHaveLength(1);
+    expect(JSON.parse(String(writes[0].data.payload))).toEqual({ schedule_monday: '06:07/21 19:31/1' });
   });
 
   it('preserves dirty drafts and blocks saves on external edited-day conflicts', async () => {

@@ -117,6 +117,26 @@ export class ScheduleGraphView extends LitElement {
         stroke-linejoin: round;
       }
 
+      .carry-over-note {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 12px;
+        color: var(--secondary-text-color, #666666);
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      .carry-over-note strong {
+        color: var(--primary-text-color, #333333);
+      }
+
+      .carry-over-key {
+        width: 24px;
+        flex-shrink: 0;
+        margin-top: 9px;
+        border-top: 2px dashed var(--secondary-text-color, #666666);
+      }
+
       .point-group {
         cursor: grab;
         pointer-events: auto;
@@ -290,9 +310,8 @@ export class ScheduleGraphView extends LitElement {
     }
 
     const temps = daySchedule.transitions.map(t => t.temperature);
-    const previousDay = DAYS_OF_WEEK[(DAYS_OF_WEEK.indexOf(this.selectedDay) + 6) % 7];
-    const previous = this.schedule?.[previousDay]?.transitions.slice(-1)[0];
-    if (previous && daySchedule.transitions[0].time !== '00:00') temps.push(previous.temperature);
+    const carryOver = this.getCarryOver();
+    if (carryOver) temps.push(carryOver.temperature);
     const minTemp = Math.min(...temps);
     const maxTemp = Math.max(...temps);
 
@@ -319,6 +338,15 @@ export class ScheduleGraphView extends LitElement {
   private getCurrentDaySchedule(): DaySchedule | null {
     if (!this.schedule) return null;
     return this.schedule[this.selectedDay] || null;
+  }
+
+  /** A display-only period, never inserted into the native transition array. */
+  private getCarryOver(): { day: DayOfWeek; temperature: number; until: string } | null {
+    const first = this.getCurrentDaySchedule()?.transitions[0];
+    if (!first || first.time === '00:00') return null;
+    const day = DAYS_OF_WEEK[(DAYS_OF_WEEK.indexOf(this.selectedDay) + 6) % 7];
+    const previous = this.schedule?.[day]?.transitions.slice(-1)[0];
+    return previous ? { day, temperature: previous.temperature, until: first.time } : null;
   }
 
   private hourToX(hour: number, width: number): number {
@@ -722,10 +750,18 @@ export class ScheduleGraphView extends LitElement {
     }
 
     const pathParts: string[] = [];
-    const previousDay = DAYS_OF_WEEK[(DAYS_OF_WEEK.indexOf(this.selectedDay) + 6) % 7];
-    const previous = this.schedule?.[previousDay]?.transitions.slice(-1)[0];
-    const inferred = previous && transitions[0].time !== '00:00'
-      ? svg`<path class="inferred-line" stroke="var(--secondary-text-color, #777)" stroke-dasharray="5 4" fill="none" d=${`M ${this.hourToX(0, width)},${this.tempToY(previous.temperature, height)} L ${this.hourToX(this.timeToHours(transitions[0].time), width)},${this.tempToY(previous.temperature, height)}`}><title>Inferred from ${previousDay}; not a stored transition</title></path>`
+    const carryOver = this.getCarryOver();
+    const inferred = carryOver
+      ? svg`
+          <path class="inferred-line" stroke="var(--secondary-text-color, #666666)"
+            stroke-width="2.5" stroke-dasharray="6 4" vector-effect="non-scaling-stroke" fill="none"
+            d=${`M ${this.hourToX(0, width)},${this.tempToY(carryOver.temperature, height)} L ${this.hourToX(this.timeToHours(carryOver.until), width)},${this.tempToY(carryOver.temperature, height)} L ${this.hourToX(this.timeToHours(carryOver.until), width)},${this.tempToY(transitions[0].temperature, height)}`}>
+            <title>Inferred from ${carryOver.day}; not a stored transition</title>
+          </path>
+          <circle class="inferred-start" cx=${this.hourToX(0, width)} cy=${this.tempToY(carryOver.temperature, height)}
+            r="5" fill="var(--card-background-color, #ffffff)" stroke="var(--secondary-text-color, #666666)"
+            stroke-width="2" vector-effect="non-scaling-stroke" aria-hidden="true" />
+        `
       : null;
 
     for (let i = 0; i < transitions.length; i++) {
@@ -818,9 +854,17 @@ export class ScheduleGraphView extends LitElement {
     }
 
     const transitions = daySchedule.transitions;
+    const carryOver = this.getCarryOver();
 
     return html`
       <div class="chart-wrapper">
+        ${carryOver ? html`
+          <div class="carry-over-note" role="note">
+            <span class="carry-over-key" aria-hidden="true"></span>
+            <span><strong>00:00–${carryOver.until}: ${carryOver.temperature === 1 ? 'Heating off (1°C)' : `${carryOver.temperature}°C`}</strong>
+              · carried over from ${carryOver.day.charAt(0).toUpperCase() + carryOver.day.slice(1)}. Display only.</span>
+          </div>
+        ` : ''}
         <svg
           class="chart-svg"
           viewBox="0 0 ${this.VIEWBOX_WIDTH} ${this.VIEWBOX_HEIGHT}"
