@@ -2417,6 +2417,7 @@ const Wt=2;let Gt=class{constructor(t){}get _$AU(){return this._$AM._$AU}_$AT(t,
       this._subscribing = false;
     }
     async _ensureSubscription() {
+      if (!this._hass?.user?.is_admin) { this._resetSubscription(); return; }
       if (!this.isConnected || !this._config || !this._hass?.connection?.subscribeMessage) return;
       const key = this._config.mqtt_device;
       if (this._subKey === key || this._subscribing) return;
@@ -2550,14 +2551,15 @@ const Wt=2;let Gt=class{constructor(t){}get _$AU(){return this._$AM._$AU}_$AT(t,
         }
       }
     }
+    _getContentRoot() { return this.shadowRoot; }
     _render() {
-      if (!this.shadowRoot) return;
+      const root = this._getContentRoot();
+      if (!root) return;
       if (this._config && !this._temperatureEdited && !this._confirm && !this._working) {
         this._temp = this._roomTemp === null
           ? (this._config.default_temperature === undefined ? 21 : Number(this._config.default_temperature))
           : Math.min(MAX_TEMP, Math.max(MIN_TEMP, Math.ceil((this._roomTemp + 1) * 2) / 2));
       }
-      const root = this.shadowRoot;
       const climate = this._hass?.states?.[this._config?.entity];
       const enabled = !!this._config && !!climate && !['unknown','unavailable'].includes(climate.state)
         && !!this._hass?.user?.is_admin && this._subKey === this._config.mqtt_device && !this._working;
@@ -2665,12 +2667,13 @@ const Wt=2;let Gt=class{constructor(t){}get _$AU(){return this._$AM._$AU}_$AT(t,
     constructor() {
       super();
       this.attachShadow({mode:'open'});
-      this._config = {type:'custom:hive-boost-card',entity:'',mqtt_device:''};
+      this._config = {type:this._configType,entity:'',mqtt_device:''};
       this._hass = null;
     }
     set hass(hass) { this._hass = hass; this._render(); }
     get hass() { return this._hass; }
-    setConfig(config) { this._config = {...config,type:'custom:hive-boost-card'}; this._render(); }
+    get _configType() { return 'custom:hive-boost-card'; }
+    setConfig(config) { this._config = {...config,type:this._configType}; this._render(); }
     _changed(key,value) {
       this._config = {...this._config,[key]:value};
       this.dispatchEvent(new CustomEvent('config-changed',{
@@ -2690,7 +2693,7 @@ const Wt=2;let Gt=class{constructor(t){}get _$AU(){return this._$AM._$AU}_$AT(t,
       <label for="entity">Climate entity</label><select id="entity"></select>
       <label for="mqtt">Zigbee2MQTT friendly name</label><input id="mqtt" placeholder="Hive Reciever">
       <small>Use the exact receiver name, including spaces and spelling.</small>
-      <label for="name">Card title (optional)</label><input id="name" placeholder="Hive Boost">
+      <label for="name">Name (optional)</label><input id="name" placeholder="Hive Boost">
       <label for="temp">Fallback temperature when room temperature is unavailable (5–32°C)</label><input id="temp" type="number" step=".5" min="5" max="32">
       <label for="duration">Default duration in minutes (15–360)</label><input id="duration" type="number" min="${MIN_DURATION}" max="360">`;
       const entities = Object.keys(this._hass?.states || {}).filter(id=>id.startsWith('climate.'));
@@ -2710,8 +2713,98 @@ const Wt=2;let Gt=class{constructor(t){}get _$AU(){return this._$AM._$AU}_$AT(t,
       }
     }
   }
+  class HiveBoostBadge extends HiveBoostCard {
+    static getConfigElement() { return document.createElement('hive-boost-badge-editor'); }
+    setConfig(config) { this._closeControls(false); super.setConfig(config); }
+    disconnectedCallback() { this._closeControls(false); super.disconnectedCallback(); }
+    _getContentRoot() { return this.shadowRoot?.querySelector('#boost-controls'); }
+    _ensureBadge() {
+      if (this.shadowRoot.querySelector('#boost-pill')) return;
+      this.shadowRoot.innerHTML = `<style>
+        :host {display:inline-flex !important;max-width:100%;vertical-align:middle;}
+        .boost-pill {display:inline-flex;align-items:center;gap:8px;max-width:100%;min-height:40px;padding:5px 12px;border:1px solid var(--divider-color,#ddd);border-radius:24px;background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#222);font:inherit;cursor:pointer;box-shadow:var(--ha-card-box-shadow,0 1px 2px #0001);}
+        .boost-pill:focus-visible,.dialog-close:focus-visible {outline:2px solid var(--primary-color,#087f8c);outline-offset:2px;}
+        .boost-pill:disabled {opacity:.6;cursor:default;}
+        .boost-pill svg {width:22px;height:22px;flex-shrink:0;color:var(--primary-color,#087f8c);fill:currentColor;}
+        .boost-pill.active svg {color:var(--state-climate-heat-color,var(--warning-color,#ef5350));}
+        .badge-text {display:grid;text-align:left;min-width:0;}
+        .badge-label {font-size:10px;line-height:13px;color:var(--secondary-text-color,#777);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+        .badge-value {font-size:14px;line-height:18px;font-weight:500;white-space:nowrap;}
+        .boost-dialog {box-sizing:border-box;width:min(480px,calc(100vw - 24px));max-width:calc(100vw - 24px);max-height:calc(100dvh - 32px);padding:0;border:1px solid var(--divider-color,#ddd);border-radius:var(--ha-card-border-radius,12px);background:var(--card-background-color,#fff);color:var(--primary-text-color,#222);font:inherit;box-shadow:0 8px 32px #0004;}
+        .boost-dialog::backdrop {background:#0006;}
+        .dialog-heading {position:sticky;top:0;z-index:1;background:var(--card-background-color,#fff);display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--divider-color,#ddd);font-weight:500;}
+        .dialog-close {border:0;border-radius:50%;background:transparent;color:inherit;font:inherit;font-size:26px;padding:0;width:40px;height:40px;cursor:pointer;}
+      </style>
+      <button id="boost-pill" class="boost-pill" type="button" aria-haspopup="dialog" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2c1 5-5 6-5 11a5 5 0 0 0 10 0c0-3-2-5-3-6 0 3-2 3-2 5-3-3 1-6 0-10Z"/></svg>
+        <span class="badge-text"><span id="boost-label" class="badge-label"></span><span id="boost-value" class="badge-value" aria-live="polite"></span></span>
+      </button>
+      <dialog id="boost-dialog" class="boost-dialog" aria-labelledby="boost-dialog-title">
+        <div class="dialog-heading"><span id="boost-dialog-title">Boost controls</span><button id="boost-close" class="dialog-close" type="button" aria-label="Close boost controls">×</button></div>
+        <div id="boost-controls"></div>
+      </dialog>`;
+      this.shadowRoot.querySelector('#boost-pill').addEventListener('click',()=>this._openControls());
+      this.shadowRoot.querySelector('#boost-close').addEventListener('click',()=>this._closeControls());
+      const dialog = this.shadowRoot.querySelector('#boost-dialog');
+      dialog.addEventListener('cancel',event=>{event.preventDefault();this._closeControls();});
+      dialog.addEventListener('click',event=>{if(event.target === dialog)this._closeControls();});
+    }
+    _openControls() {
+      const dialog = this.shadowRoot.querySelector('#boost-dialog');
+      if (!dialog || dialog.open) return;
+      if (typeof dialog.showModal === 'function') dialog.showModal();
+      else dialog.setAttribute('open','');
+      this.shadowRoot.querySelector('#boost-pill').setAttribute('aria-expanded','true');
+      this._getContentRoot().querySelector('#temperature, #confirm')?.focus();
+    }
+    _closeControls(restoreFocus = true) {
+      const dialog = this.shadowRoot.querySelector('#boost-dialog');
+      if (!dialog?.open) return;
+      if (typeof dialog.close === 'function') dialog.close();
+      else dialog.removeAttribute('open');
+      const pill = this.shadowRoot.querySelector('#boost-pill');
+      pill.setAttribute('aria-expanded','false');
+      if (restoreFocus && this.isConnected) pill.focus();
+    }
+    _render() {
+      if (!this.shadowRoot) return;
+      this._ensureBadge();
+      const previousFocus = this.shadowRoot.activeElement;
+      const focusId = previousFocus?.closest('#boost-controls') ? previousFocus.id : null;
+      super._render();
+      const root = this.shadowRoot;
+      const pill = root.querySelector('#boost-pill');
+      const climate = this._hass?.states?.[this._config?.entity];
+      const active = holdEnabled(this._data?.temperature_setpoint_hold);
+      const duration = Number(this._data?.temperature_setpoint_hold_duration);
+      const name = this._config?.name || 'Hive Boost';
+      let value = Number.isFinite(this._roomTemp) ? `${this._roomTemp.toFixed(1)}°C` : 'State unknown';
+      if (!climate || ['unknown','unavailable'].includes(climate.state)) value = 'Unavailable';
+      else if (this._working) value = 'Verifying…';
+      else if (this._error) value = 'Check Boost';
+      else if (active) value = 'Boost active' + (Number.isInteger(duration) && duration > 0 && duration <= MAX_DURATION ? ` · ${duration}m` : '');
+      root.querySelector('#boost-label').textContent = name;
+      root.querySelector('#boost-value').textContent = value;
+      pill.classList.toggle('active',active);
+      pill.disabled = !this._config || !this._hass;
+      pill.setAttribute('aria-label',`${name}: ${value}. Open Boost controls.`);
+      pill.title = this._error || `${name}: ${value}`;
+      if (focusId && root.querySelector('#boost-dialog').open) {
+        (this._getContentRoot().querySelector(`[id="${focusId}"]`) || this._getContentRoot().querySelector('#confirm') || root.querySelector('#boost-close'))?.focus({preventScroll:true});
+      }
+    }
+  }
+  class HiveBoostBadgeEditor extends HiveBoostCardEditor {
+    get _configType() { return 'custom:hive-boost-badge'; }
+  }
   customElements.define('hive-boost-card', HiveBoostCard);
   customElements.define('hive-boost-card-editor', HiveBoostCardEditor);
+  customElements.define('hive-boost-badge', HiveBoostBadge);
+  customElements.define('hive-boost-badge-editor', HiveBoostBadgeEditor);
+  window.customBadges = window.customBadges || [];
+  if (!window.customBadges.some(badge => badge.type === 'hive-boost-badge')) {
+    window.customBadges.push({type:'hive-boost-badge',name:'Hive Boost Badge',description:'Hive Boost status with timed boost controls on tap',preview:true,documentationURL:'https://github.com/sultanhq/ha_hive_scheduler_card#hive-boost-badge'});
+  }
   window.customCards = window.customCards || [];
   if (!window.customCards.some(card => card.type === 'hive-boost-card')) {
     window.customCards.push({
