@@ -1,320 +1,120 @@
-# TRVZB Scheduler Card
+# Hive Scheduler Card
 
-[![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
-[![GitHub Downloads](https://img.shields.io/github/downloads/abaddon/ha_sonoff_TRVZB_scheduler_card/total.svg?label=downloads&logo=github)](https://github.com/abaddon/ha_sonoff_TRVZB_scheduler_card/releases)
-[![GitHub Release](https://img.shields.io/github/release/abaddon/ha_sonoff_TRVZB_scheduler_card.svg)](https://github.com/abaddon/ha_sonoff_TRVZB_scheduler_card/releases)
-[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.1%2B-blue.svg)](https://www.home-assistant.io/)
-[![Zigbee2MQTT](https://img.shields.io/badge/Zigbee2MQTT-Compatible-green.svg)](https://www.zigbee2mqtt.io/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+A Home Assistant dashboard card for the **native heating schedule stored on a Hive SLR1c receiver**, through Zigbee2MQTT. The receiver executes the timetable; Home Assistant provides the editor and MQTT transport. No custom integration or Schedule Helper is required.
 
-A Home Assistant custom card for managing weekly heating schedules on **Sonoff TRVZB** thermostatic radiator valves integrated via Zigbee2MQTT.
+![Schedule edits pass through Zigbee2MQTT; the Hive receiver stores and executes the timetable, with fresh read-back confirming saves.](docs/hive-schedule-flow.svg)
 
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=abaddon&repository=ha_sonoff_TRVZB_scheduler_card&category=plugin)
+Derived from [abaddon's Sonoff TRVZB Scheduler Card](https://github.com/abaddon/ha_sonoff_TRVZB_scheduler_card). The original MIT licence and Copyright (c) 2024 abaddon are preserved in [LICENSE](LICENSE) and the compiled card.
 
-> [!WARNING]
-> **Zigbee2MQTT Requirement:** This card requires zigbee-herdsman-converters with the weekly schedule sensor fixed for TRVZB devices. This feature is available from the version [v25.104.0](https://github.com/Koenkk/zigbee-herdsman-converters/releases/tag/v25.104.0) and the first version of Zigbee2MQTT that include it is [2.7.3](https://github.com/Koenkk/zigbee2mqtt/releases/tag/2.7.3)
-Please ensure your Zigbee2MQTT version includes this change.
+## Requirements and validation status
 
-## Features
+- Hive SLR1c with the working external converter exposing seven writable text properties, `schedule_monday` through `schedule_sunday`, `/get` support, and receiver-originated schedule responses. It must not optimistically publish requested schedules as confirmed state. The converter is not bundled or modified by this card.
+- Zigbee2MQTT Home Assistant discovery and Home Assistant's MQTT integration, using base topic `zigbee2mqtt`.
+- Home Assistant 2024.1 or newer. Viewing requires entity access. **Verified saving requires a Home Assistant administrator**, because HA's MQTT listener requires administrator permissions.
+- Temperatures: **1°C off**, or **5–32°C in 0.5°C steps**. One to six chronological setpoints per day, with every minute supported.
 
-- **Two View Modes**: Switch between a visual weekly calendar grid and an interactive graph view with drag controls
-- **Full Schedule Control**: Edit up to 6 temperature transitions per day
-- **Copy Schedules**: Easily copy a day's schedule to other days (weekdays, weekend, or custom selection)
-- **Temperature Range**: Set temperatures from 4°C to 35°C in 0.5°C increments
-- **Smart Defaults**: Automatically adds midnight (00:00) transition if missing and removes duplicate time entries
-- **Theme Integration**: Follows your Home Assistant theme colors
-- **Temperature Color Coding**: Visual temperature indicators (blue for cold, red for hot)
-- **Responsive Design**: Works on desktop, tablet, and mobile devices
+The owner has hardware-tested the converter and confirmed the card's complete end-to-end hardware acceptance on 29 October 2026. No production release has been published for this implementation.
 
-## Screenshots
+## HACS installation
 
-<!-- TODO: Add actual screenshots -->
-| Week View | Graph View                                                                                                            | Day Editor |
-|-----------|-----------------------------------------------------------------------------------------------------------------------|------------|
-| ![Week View](https://raw.githubusercontent.com/abaddon/ha_sonoff_TRVZB_scheduler_card/main/screenshots/week-view.png) | ![List View](https://raw.githubusercontent.com/abaddon/ha_sonoff_TRVZB_scheduler_card/main/screenshots/graph-view.png) | ![Day Editor](https://raw.githubusercontent.com/abaddon/ha_sonoff_TRVZB_scheduler_card/main/screenshots/day-editor.png) |
+Install this repository as a custom HACS Dashboard repository:
 
-## Requirements
+1. Open HACS → menu → **Custom repositories**.
+2. Add `https://github.com/sultanhq/ha_hive_scheduler_card`, category **Dashboard** (`plugin` in older interfaces).
+3. Download **Hive Scheduler Card** from the default branch and reload the frontend.
+4. Verify resource `/hacsfiles/ha_hive_scheduler_card/hive-scheduler-card.js`, type **JavaScript module**, under Settings → Dashboards → Resources. Add it manually if HACS has not registered it.
 
-- **Home Assistant** 2024.1 or later
-- **HACS** (Home Assistant Community Store) - for easy installation
-- **Zigbee2MQTT** with Sonoff TRVZB device integrated
-- **MQTT Integration** enabled in Home Assistant
+The compiled file is committed under `dist/`, so a GitHub release and inclusion in the main HACS catalogue are unnecessary. Install from this repository's `main` branch.
 
-## Installation
+## Manual development installation
 
-### Option 1: HACS Installation (Recommended)
-
-1. Make sure [HACS](https://hacs.xyz/) is installed in your Home Assistant instance
-
-2. Click the button below to add this repository to HACS:
-
-   [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=abaddon&repository=ha_sonoff_TRVZB_scheduler_card&category=plugin)
-
-   **Or manually add the repository:**
-
-   1. Open HACS in Home Assistant
-   2. Click on the three dots menu in the top right corner
-   3. Select **Custom repositories**
-   4. Add the repository URL: `https://github.com/abaddon/ha_sonoff_TRVZB_scheduler_card`
-   5. Select **Dashboard** as the category
-   6. Click **Add**
-
-3. Search for "TRVZB Scheduler Card" in HACS
-
-4. Click **Download**
-
-5. Restart Home Assistant
-
-6. Add the card to your dashboard (see [Configuration](#configuration))
-
-### Option 2: Manual Installation
-
-1. Download `trvzb-scheduler-card.js` from the [latest release](https://github.com/abaddon/ha_sonoff_TRVZB_scheduler_card/releases/latest)
-
-2. Copy the file to your Home Assistant config directory:
-   ```
-   /config/www/trvzb-scheduler-card.js
-   ```
-
-3. Add the resource to your dashboard:
-   - Go to **Settings** → **Dashboards**
-   - Click the three-dot menu → **Resources**
-   - Click **Add Resource**
-   - Enter URL: `/local/trvzb-scheduler-card.js`
-   - Select **JavaScript Module**
-   - Click **Create**
-
-4. Restart Home Assistant
-
-5. Add the card to your dashboard (see [Configuration](#configuration))
+1. Download `dist/hive-scheduler-card.js` from branch `feat/hive-slr1c-scheduler`, or unzip the `hive-scheduler-card` artifact from a successful branch CI run.
+2. Copy the file to `/config/www/hive-scheduler-card.js` in Home Assistant.
+3. Register `/local/hive-scheduler-card.js?v=hive-dev-1` as a **JavaScript module** resource. Increment the version query after replacing the file and reload the browser.
+4. Add the configuration below. Load only one copy of the card's resource; HACS and manual installation are alternatives.
 
 ## Configuration
 
-### Using the Visual Editor
-
-1. Go to your dashboard
-2. Click **Edit Dashboard** (pencil icon)
-3. Click **Add Card**
-4. Search for "TRVZB Scheduler Card"
-5. Select your climate entity from the dropdown
-6. Optionally set a custom name and default view mode
-7. Click **Save**
-
-### Using YAML
-
-#### Basic Configuration
-
 ```yaml
-type: custom:trvzb-scheduler-card
-entity: climate.living_room_trvzb
+type: custom:hive-scheduler-card
+entity: climate.hive_reciever  # illustrative: select your actual entity
+mqtt_device: "Hive Reciever"  # exact spelling, case, and embedded space
+name: Hive Heating
+view_mode: week              # week (default) or graph
 ```
 
-#### Full Configuration
+`entity` and `mqtt_device` are required and independent. The friendly name is used verbatim in MQTT topics. Wildcards, `/`, and control characters are rejected rather than replaced. `name` is optional.
+
+Schedule text entities are discovered through the climate entity's HA device and MQTT schedule identifiers. Renamed entities work independently of the climate entity ID. If discovery is missing or ambiguous, configure overrides in YAML or the visual editor:
 
 ```yaml
-type: custom:trvzb-scheduler-card
-entity: climate.living_room_trvzb
-name: Living Room Heating
-view_mode: week
+type: custom:hive-scheduler-card
+entity: climate.actual_hive_entity
+mqtt_device: "Hive Reciever"
+name: Hive Heating
+view_mode: graph
+schedule_entities:
+  monday: text.actual_monday_entity
+  tuesday: text.actual_tuesday_entity
+  wednesday: text.actual_wednesday_entity
+  thursday: text.actual_thursday_entity
+  friday: text.actual_friday_entity
+  saturday: text.actual_saturday_entity
+  sunday: text.actual_sunday_entity
 ```
 
-### Configuration Options
+Overrides may be partial; discovery resolves the remainder. Each day needs a different `text.*` entity.
 
-| Option | Type | Required | Default | Description |
-|--------|------|----------|---------|-------------|
-| `entity` | string | **Yes** | - | The climate entity ID of your TRVZB device |
-| `name` | string | No | Entity friendly name | Custom title for the card |
-| `view_mode` | string | No | `week` | Default view mode: `week` or `graph` |
+## Editing and verified saving
 
-## Usage
+Click a day to edit setpoints, or drag stored graph points. Each setpoint sets a temperature from a particular time. The first point is editable and deletable; retain at least one point. Choose **Heating off (1°C)** for an off period. Graph lines use the same temperature colours as their points and the timetable, including the dashed overnight period. Temperatures below 10°C are blue, 10–15°C are green, and warmer values gradually move through yellow into near-red at 20–25°C, then pure red above 25°C. Slider tracks share this palette on the 5–32°C heating scale, and their thumb outlines match the selected temperature. Labels sit beside graph steps, with a background outline to keep crossing lines clear of the text. Use **Copy to Other Days** to copy a day's schedule.
 
-### Switching Views
+Schedules may begin after midnight. A dashed graph segment before the first setpoint shows the previous day's final temperature, including weekly wraparound. Hover over this segment or its open start marker to see the temperature, time interval, and previous day—for example, “00:00–06:00: Heating off (1°C), carried over from Sunday”. It has no editable point and is never written. Identical duplicate padding is collapsed; different schedule times with equal temperatures remain distinct.
 
-Click the view toggle button in the card header to switch between:
-- **Week View**: Visual 7-day calendar with colored temperature blocks
-- **Graph View**: Interactive temperature graph with drag-to-adjust controls
+Save validates the draft and publishes only changed days:
 
-### Editing a Day's Schedule
+```text
+Topic: zigbee2mqtt/Hive Reciever/set
+Payload: {"schedule_monday":"06:00/21 19:30/1"}
 
-1. Click on any day in week view to open the editor, or drag points directly in graph view
-2. The day editor modal will open showing all transitions
-3. Modify times and temperatures as needed
-4. Changes are auto-saved to the card (click main **Save** button to send to device)
+Topic: zigbee2mqtt/Hive Reciever/get
+Payload: {"schedule_monday":""}
+```
 
-### Adding Transitions
+**Verifying…** remains visible until fresh, non-retained feedback and the associated HA entities agree with the intended schedule. Duplicate padding and formatting differences are ignored. Read requests retry at 10 and 20 seconds with a 30-second read-back deadline. Individual HA calls time out after five seconds. Writes are never automatically repeated.
 
-1. Open the day editor
-2. Click **Add Transition** (max 6 per day)
-3. Set the time and temperature
-4. Click **Save**
+Errors preserve your draft. Confirmed days are tracked on partial failure; check connectivity and Zigbee2MQTT logs before retrying. External changes to an edited day block saving until you explicitly **Discard edits and reload**. This discards the draft and requests all seven schedules without writing schedules.
 
-### Removing Transitions
+The native protocol has no transaction ID; verification relies on the supplied converter's receiver responses and a fresh read-back window. A multi-day save is not atomic. Avoid other controllers editing schedules during acceptance testing.
 
-1. Open the day editor
-2. Click the **X** button next to any transition (except the first one at 00:00)
-3. Click **Save**
+Missing entities and malformed, unordered, conflicting, or unsupported schedules show errors. The card never substitutes defaults or rounds existing unsupported values. It deliberately restricts temperatures to half-degree steps, even if a converter accepts finer precision.
 
-### Copying Schedules
+## Hardware acceptance
 
-1. Open the day editor for the day you want to copy
-2. Click **Copy to Other Days...**
-3. Select target days using checkboxes or quick buttons:
-   - **Weekdays**: Monday through Friday
-   - **Weekend**: Saturday and Sunday
-   - **All**: All days except the source
-4. Click **Copy**
-5. Click **Save** on the main card to apply to the device
+First display all seven days against the actual HA text entities. **Refresh** sends read-only `/get` requests.
 
-### Saving to Device
+After explicit approval for a hardware write:
 
-After making changes, click the **Save** button in the card header to send the schedule to your TRVZB device via MQTT.
+1. Back up the exact original text state for one day.
+2. Change one temperature by 0.5°C, save, and wait for verification.
+3. Confirm the value on the physical Hive remote and record the result.
+4. Restore the backup and verify read-back and remote display.
+5. Back up a target day, test copying to it, then restore and verify it.
 
-## Schedule Format
-
-The TRVZB device uses the following schedule format:
-
-- Each day can have up to **6 transitions**
-- Each transition specifies a **time** (HH:mm) and **temperature** (4-35°C)
-- The first transition must be at **00:00** (midnight) - automatically added if missing
-- Temperature steps are **0.5°C**
-- The temperature remains active until the next transition
-- **Duplicate transitions** with the same time are automatically removed (first occurrence is kept)
-
-Example: `00:00/18 06:00/21 08:00/18 17:00/22 22:00/18`
-- Midnight to 6:00 AM: 18°C
-- 6:00 AM to 8:00 AM: 21°C
-- 8:00 AM to 5:00 PM: 18°C
-- 5:00 PM to 10:00 PM: 22°C
-- 10:00 PM to midnight: 18°C
+The owner confirmed completion of this hardware acceptance procedure on 29 October 2026. The procedure above remains available for future installation checks. Production publication is a separate action.
 
 ## Development
 
-### Setup
-
-```bash
-# Clone the repository
-git clone https://github.com/abaddon/ha_sonoff_TRVZB_scheduler_card.git
-cd ha_sonoff_TRVZB_scheduler_card
-
-# Install dependencies
-npm install
-```
-
-### Development Mode
-
-```bash
-# Start development server with watch mode
-npm run dev
-```
-
-The built file will be in `dist/trvzb-scheduler-card.js`. You can symlink this to your HA config for live development.
-
-### Production Build
-
-```bash
-# Build for production (minified)
-npm run build
-```
-
-### Testing
-
-```bash
-# Run all tests
+```sh
+npm ci
 npm test
-
-# Run tests in watch mode
-npm run test:watch
+npm run typecheck
+npm run build
+git diff --exit-code -- dist/hive-scheduler-card.js
 ```
 
-### Project Structure
+Rebuild and commit the JavaScript alongside source changes. CI verifies the committed build and uploads an artifact; other generated files remain ignored. Serve this repository locally and open `test-component.html` for a mock preview that never contacts hardware.
 
-```
-src/
-├── index.ts                    # Entry point
-├── card.ts                     # Main card component
-├── editor.ts                   # Card configuration editor
-├── components/
-│   ├── schedule-week-view.ts   # Weekly calendar view
-│   ├── schedule-graph-view.ts  # Interactive graph view with drag controls
-│   ├── day-schedule-editor.ts  # Day editing modal
-│   ├── transition-editor.ts    # Single transition editor
-│   └── copy-schedule-dialog.ts # Copy schedule dialog
-├── models/
-│   ├── types.ts                # TypeScript interfaces & constants
-│   └── schedule.ts             # Schedule parsing/serialization
-├── services/
-│   └── ha-service.ts           # Home Assistant integration
-├── utils/
-│   ├── time.ts                 # Time utilities
-│   └── validation.ts           # Validation logic
-└── styles/
-    └── card-styles.ts          # Shared CSS styles
-```
+Tag-triggered release automation creates **draft releases only**. Optional inherited Claude automation requires repository variable `ENABLE_CLAUDE_AUTOMATION=true` and its credentials.
 
-## Troubleshooting
-
-### Card Not Showing
-
-1. Ensure the resource is added correctly in Dashboard → Resources
-2. Clear your browser cache (Ctrl+Shift+R or Cmd+Shift+R)
-3. Check the browser console (F12) for errors
-4. Restart Home Assistant after installation
-
-### Card Not Found in Add Card Dialog
-
-1. Make sure you've restarted Home Assistant after installation
-2. Clear your browser cache
-3. Try accessing your dashboard in an incognito/private window
-
-### Entity Not Found
-
-1. Verify your TRVZB is properly integrated with Zigbee2MQTT
-2. Check that the climate entity exists in **Settings** → **Devices & Services** → **Entities**
-3. Ensure the entity ID in the card config matches exactly
-
-### Schedule Not Saving
-
-1. Check that MQTT integration is working in Home Assistant
-2. Verify the Zigbee2MQTT device is online
-3. Check Home Assistant logs (**Settings** → **System** → **Logs**) for MQTT errors
-4. Ensure you have the correct permissions to publish MQTT messages
-
-### Schedule Not Loading
-
-1. The schedule is read from 7 separate day text entities (e.g., `text.device_name_weekly_schedule_monday`)
-2. Ensure Zigbee2MQTT is exposing the weekly schedule text entities
-3. Check if all 7 day text entities exist in Developer Tools → States
-4. Try requesting the schedule manually: publish to `zigbee2mqtt/DEVICE_NAME/get` with payload `{"weekly_schedule":""}`
-
-### HACS Installation Issues
-
-1. Make sure HACS is properly installed and configured
-2. Try removing and re-adding the custom repository
-3. Check HACS logs for any error messages
-4. Ensure your Home Assistant instance can reach GitHub
-
-## Contributing
-
-Contributions are welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Acknowledgments
-
-- [Home Assistant](https://www.home-assistant.io/) - The home automation platform
-- [HACS](https://hacs.xyz/) - Home Assistant Community Store
-- [Zigbee2MQTT](https://www.zigbee2mqtt.io/) - Zigbee to MQTT bridge
-- [LitElement](https://lit.dev/) - Web components library
-- [Sonoff](https://sonoff.tech/) - TRVZB thermostatic radiator valve
-
----
-
-Made with ❤️ for the Home Assistant community
+See [development validation](docs/development-validation.md) for baseline results, dependency findings, and hardware status.

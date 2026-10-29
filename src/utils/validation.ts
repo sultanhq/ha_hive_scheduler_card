@@ -1,5 +1,5 @@
 /**
- * Validation utilities for TRVZB schedules
+ * Validation utilities for Hive SLR1c schedules
  * Implements all validation rules from the design document
  */
 
@@ -19,17 +19,10 @@ export function isValidTime(time: string): boolean {
 }
 
 /**
- * Check if temperature is valid (4-35°C, 0.5°C steps)
+ * Check if temperature is valid (1°C off or 5–32°C in 0.5°C steps)
  */
 export function isValidTemperature(temp: number): boolean {
-  // Check range
-  if (temp < 4 || temp > 35) {
-    return false;
-  }
-
-  // Check 0.5°C steps (multiply by 2 to check if it's a whole number)
-  const doubled = temp * 2;
-  return Number.isInteger(doubled);
+  return Number.isFinite(temp) && (temp === 1 || (temp >= 5 && temp <= 32 && Number.isInteger(temp * 2)));
 }
 
 /**
@@ -45,11 +38,7 @@ export function validateTransition(transition: Transition): ValidationResult {
 
   // Validate temperature
   if (!isValidTemperature(transition.temperature)) {
-    if (transition.temperature < 4 || transition.temperature > 35) {
-      errors.push(`Temperature ${transition.temperature}°C is out of range. Must be 4-35°C`);
-    } else {
-      errors.push(`Temperature ${transition.temperature}°C is invalid. Must be in 0.5°C steps`);
-    }
+    errors.push(`Temperature ${transition.temperature}°C must be 1°C (off) or 5–32°C in 0.5°C steps`);
   }
 
   return {
@@ -63,22 +52,18 @@ export function validateTransition(transition: Transition): ValidationResult {
  */
 export function validateDaySchedule(schedule: DaySchedule): ValidationResult {
   const errors: string[] = [];
-  const transitions = schedule.transitions;
+  const transitions = schedule?.transitions;
+  if (!Array.isArray(transitions)) return { valid: false, errors: ['Missing setpoints'] };
 
   // Check minimum transitions
   if (transitions.length === 0) {
-    errors.push('Day schedule must have at least 1 transition');
+    errors.push('Day schedule must have at least 1 setpoint');
     return { valid: false, errors };
   }
 
   // Check maximum transitions
   if (transitions.length > 6) {
-    errors.push(`Too many transitions: ${transitions.length}. Maximum is 6 per day`);
-  }
-
-  // Check first transition is at 00:00
-  if (transitions[0].time !== '00:00') {
-    errors.push(`First transition must be at 00:00, found ${transitions[0].time}`);
+    errors.push(`Too many setpoints: ${transitions.length}. Maximum is 6 per day`);
   }
 
   // Validate each transition
@@ -86,17 +71,10 @@ export function validateDaySchedule(schedule: DaySchedule): ValidationResult {
     const result = validateTransition(transition);
     if (!result.valid) {
       result.errors.forEach(error => {
-        errors.push(`Transition ${index + 1}: ${error}`);
+        errors.push(`Setpoint ${index + 1}: ${error}`);
       });
     }
   });
-
-  // Check for duplicate times
-  const times = transitions.map(t => t.time);
-  const uniqueTimes = new Set(times);
-  if (times.length !== uniqueTimes.size) {
-    errors.push('Duplicate transition times found. Each time must be unique');
-  }
 
   // Check chronological order
   for (let i = 1; i < transitions.length; i++) {
@@ -112,8 +90,11 @@ export function validateDaySchedule(schedule: DaySchedule): ValidationResult {
     const prevMinutes = prevH * 60 + prevM;
     const currMinutes = currH * 60 + currM;
 
-    if (currMinutes <= prevMinutes) {
-      errors.push(`Transitions must be in chronological order: ${prevTime} should come before ${currTime}`);
+    if (currMinutes === prevMinutes && transitions[i].temperature !== transitions[i - 1].temperature) {
+      errors.push(`Conflicting temperatures at ${currTime}`);
+    }
+    if (currMinutes < prevMinutes) {
+      errors.push(`Setpoints must be in chronological order: ${prevTime} should come before ${currTime}`);
     }
   }
 

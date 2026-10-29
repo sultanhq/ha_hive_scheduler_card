@@ -16,7 +16,7 @@ const MQTT_FORBIDDEN_CHARS_REGEX = /[+#/\0]/g;
  * Same pattern without /g flag for use with .test()
  * (Regex with /g flag is stateful and causes issues with repeated .test() calls)
  */
-const MQTT_FORBIDDEN_CHARS_TEST_REGEX = /[+#/\0]/;
+const MQTT_FORBIDDEN_CHARS_TEST_REGEX = /[+#/\x00-\x1f\x7f]/;
 
 /**
  * Replacement character for forbidden MQTT characters
@@ -109,4 +109,11 @@ export function isValidMqttTopicSegment(input: string): boolean {
   }
 
   return !MQTT_FORBIDDEN_CHARS_TEST_REGEX.test(input);
+}
+
+/** Reject unsafe names without changing spelling, whitespace, or case. */
+export function validateMqttDevice(input: string): void {
+  if (typeof input !== 'string' || !isValidMqttTopicSegment(input)) {
+    throw new Error('mqtt_device must be a non-empty friendly name without /, +, # or control characters.');
+  }
 }

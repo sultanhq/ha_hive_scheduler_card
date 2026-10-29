@@ -1,358 +1,71 @@
-/**
- * Unit tests for schedule.ts
- * Tests schedule parsing, serialization, and manipulation functions
- */
-
 import { describe, it, expect } from 'vitest';
-import {
-  parseDaySchedule,
-  serializeDaySchedule,
-  parseWeeklySchedule,
-  serializeWeeklySchedule,
-  createEmptyDaySchedule,
-  createEmptyWeeklySchedule,
-  ensureMidnightTransition,
-  sortTransitions,
-  copyDaySchedule,
-  removeDuplicateTransitions,
-  computeScheduleDiff,
-  buildPartialPayload
-} from '../../src/models/schedule';
-import { DaySchedule, MQTTWeeklySchedule, Transition, DayOfWeek } from '../../src/models/types';
+import { parseDaySchedule, serializeDaySchedule, parseWeeklySchedule, serializeWeeklySchedule,
+  createEmptyDaySchedule, createEmptyWeeklySchedule, sortTransitions, copyDaySchedule,
+  removeDuplicateTransitions, computeScheduleDiff, buildPartialPayload, generateTransitionId } from '../../src/models/schedule';
+import { DAYS_OF_WEEK, type WeeklySchedule, type MQTTWeeklySchedule, type Transition, type DaySchedule, type ScheduleDiff } from '../../src/models/types';
+const weekly = (value = '06:07/20.5 19:31/1') => parseWeeklySchedule(Object.fromEntries(DAYS_OF_WEEK.map(day => [day, value])) as MQTTWeeklySchedule);
 
-describe('schedule.ts', () => {
-  describe('parseDaySchedule', () => {
-    it('should parse valid schedule string', () => {
-      const input = '00:00/20 06:00/22 08:00/18 17:00/22 22:00/18';
-      const result = parseDaySchedule(input);
-
-      expect(result.transitions).toHaveLength(5);
-      expect(result.transitions[0]).toMatchObject({ time: '00:00', temperature: 20 });
-      expect(result.transitions[1]).toMatchObject({ time: '06:00', temperature: 22 });
-      expect(result.transitions[2]).toMatchObject({ time: '08:00', temperature: 18 });
-      expect(result.transitions[3]).toMatchObject({ time: '17:00', temperature: 22 });
-      expect(result.transitions[4]).toMatchObject({ time: '22:00', temperature: 18 });
-    });
-
-    it('should parse schedule with decimal temperatures', () => {
-      const input = '00:00/20.5 12:00/22.5';
-      const result = parseDaySchedule(input);
-
-      expect(result.transitions).toHaveLength(2);
-      expect(result.transitions[0].temperature).toBe(20.5);
-      expect(result.transitions[1].temperature).toBe(22.5);
-    });
-
-    it('should handle empty string', () => {
-      const result = parseDaySchedule('');
-
-      expect(result.transitions).toHaveLength(1);
-      expect(result.transitions[0]).toMatchObject({ time: '00:00', temperature: 20 });
-    });
-
-    it('should handle whitespace-only string', () => {
-      const result = parseDaySchedule('   ');
-
-      expect(result.transitions).toHaveLength(1);
-      expect(result.transitions[0]).toMatchObject({ time: '00:00', temperature: 20 });
-    });
-
-    it('should skip malformed transitions and continue parsing', () => {
-      const input = '00:00/20 invalid 06:00/22 bad/format 08:00/18';
-      const result = parseDaySchedule(input);
-
-      // Should have 3 valid transitions
-      expect(result.transitions).toHaveLength(3);
-      expect(result.transitions[0].time).toBe('00:00');
-      expect(result.transitions[1].time).toBe('06:00');
-      expect(result.transitions[2].time).toBe('08:00');
-    });
-
-    it('should return default schedule when all transitions are malformed', () => {
-      const input = 'invalid bad wrong';
-      const result = parseDaySchedule(input);
-
-      expect(result.transitions).toHaveLength(1);
-      expect(result.transitions[0]).toMatchObject({ time: '00:00', temperature: 20 });
-    });
-
-    it('should add midnight transition if missing', () => {
-      const input = '06:00/22 08:00/18';
-      const result = parseDaySchedule(input);
-
-      expect(result.transitions[0].time).toBe('00:00');
-      expect(result.transitions).toHaveLength(3);
-    });
-
-    it('should sort transitions chronologically', () => {
-      const input = '22:00/18 06:00/22 00:00/20';
-      const result = parseDaySchedule(input);
-
-      expect(result.transitions[0].time).toBe('00:00');
-      expect(result.transitions[1].time).toBe('06:00');
-      expect(result.transitions[2].time).toBe('22:00');
-    });
-
-    it('should handle extra whitespace between transitions', () => {
-      const input = '00:00/20    06:00/22   08:00/18';
-      const result = parseDaySchedule(input);
-
-      expect(result.transitions).toHaveLength(3);
-      expect(result.transitions[0].time).toBe('00:00');
-    });
+describe('Hive schedule model', () => {
+  it('collapses the typical six-slot Hive response without inserting midnight', () => {
+    const parsed = parseDaySchedule('06:00/20.5 19:30/1 19:30/1 19:30/1 19:30/1 19:30/1');
+    expect(parsed.transitions).toHaveLength(2);
+    expect(serializeDaySchedule(parsed)).toBe('06:00/20.5 19:30/1');
   });
-
-  describe('serializeDaySchedule', () => {
-    it('should serialize schedule to MQTT format', () => {
-      const schedule: DaySchedule = {
-        transitions: [
-          { time: '00:00', temperature: 20 },
-          { time: '06:00', temperature: 22 },
-          { time: '08:00', temperature: 18 }
-        ]
-      };
-
-      const result = serializeDaySchedule(schedule);
-
-      expect(result).toBe('00:00/20 06:00/22 08:00/18');
-    });
-
-    it('should format decimal temperatures correctly', () => {
-      const schedule: DaySchedule = {
-        transitions: [
-          { time: '00:00', temperature: 20.5 },
-          { time: '12:00', temperature: 22.5 }
-        ]
-      };
-
-      const result = serializeDaySchedule(schedule);
-
-      expect(result).toBe('00:00/20.5 12:00/22.5');
-    });
-
-    it('should format whole number temperatures without decimals', () => {
-      const schedule: DaySchedule = {
-        transitions: [
-          { time: '00:00', temperature: 20.0 },
-          { time: '12:00', temperature: 22.0 }
-        ]
-      };
-
-      const result = serializeDaySchedule(schedule);
-
-      expect(result).toBe('00:00/20 12:00/22');
-    });
-
-    it('should sort transitions before serializing', () => {
-      const schedule: DaySchedule = {
-        transitions: [
-          { time: '22:00', temperature: 18 },
-          { time: '06:00', temperature: 22 },
-          { time: '00:00', temperature: 20 }
-        ]
-      };
-
-      const result = serializeDaySchedule(schedule);
-
-      expect(result).toBe('00:00/20 06:00/22 22:00/18');
-    });
-
-    it('should handle single transition', () => {
-      const schedule: DaySchedule = {
-        transitions: [{ time: '00:00', temperature: 20 }]
-      };
-
-      const result = serializeDaySchedule(schedule);
-
-      expect(result).toBe('00:00/20');
-    });
+  it.each(['06:07/20.5', '00:00/1', '23:59/32', '05:01/5', '06:00/20.50', ' 06:00/20.5\n  19:30/1 '])('round-trips valid native values: %s', value => {
+    const once = serializeDaySchedule(parseDaySchedule(value));
+    expect(serializeDaySchedule(parseDaySchedule(once))).toBe(once);
   });
-
-  describe('parseWeeklySchedule', () => {
-    it('should parse all days of the week', () => {
-      const mqtt: MQTTWeeklySchedule = {
-        sunday: '00:00/20 06:00/22',
-        monday: '00:00/18 07:00/22',
-        tuesday: '00:00/19 08:00/22',
-        wednesday: '00:00/20 09:00/22',
-        thursday: '00:00/21 10:00/22',
-        friday: '00:00/22 11:00/22',
-        saturday: '00:00/23 12:00/22'
-      };
-
-      const result = parseWeeklySchedule(mqtt);
-
-      expect(result.sunday.transitions[0].temperature).toBe(20);
-      expect(result.monday.transitions[0].temperature).toBe(18);
-      expect(result.tuesday.transitions[0].temperature).toBe(19);
-      expect(result.wednesday.transitions[0].temperature).toBe(20);
-      expect(result.thursday.transitions[0].temperature).toBe(21);
-      expect(result.friday.transitions[0].temperature).toBe(22);
-      expect(result.saturday.transitions[0].temperature).toBe(23);
-    });
-
-    it('should handle empty day schedules', () => {
-      const mqtt: MQTTWeeklySchedule = {
-        sunday: '',
-        monday: '',
-        tuesday: '',
-        wednesday: '',
-        thursday: '',
-        friday: '',
-        saturday: ''
-      };
-
-      const result = parseWeeklySchedule(mqtt);
-
-      // All days should have default schedule
-      expect(result.sunday.transitions[0]).toMatchObject({ time: '00:00', temperature: 20 });
-      expect(result.monday.transitions[0]).toMatchObject({ time: '00:00', temperature: 20 });
-    });
-
-    it('should handle missing day properties', () => {
-      const mqtt = {} as MQTTWeeklySchedule;
-
-      const result = parseWeeklySchedule(mqtt);
-
-      // All days should have default schedule
-      expect(result.sunday.transitions[0]).toMatchObject({ time: '00:00', temperature: 20 });
-      expect(result.monday.transitions[0]).toMatchObject({ time: '00:00', temperature: 20 });
-    });
+  it.each(['', '  ', 'invalid', '06:00/20 bad', '6:00/20', '24:00/20', '06:60/20', '06:00/NaN', '06:00/Infinity', '06:00/-1', '06:00/20.25', '06:00/4', '06:00/32.5', '06:00/2', '06:00/20/1', '06:00/20.500', '12:00/20 06:00/20', '06:00/20 06:00/21'])('rejects invalid schedules without defaults: %s', value => {
+    expect(() => parseDaySchedule(value)).toThrow();
   });
-
-  describe('serializeWeeklySchedule', () => {
-    it('should serialize all days of the week', () => {
-      const schedule = createEmptyWeeklySchedule();
-      schedule.sunday.transitions = [{ time: '00:00', temperature: 20 }];
-      schedule.monday.transitions = [{ time: '00:00', temperature: 18 }];
-
-      const result = serializeWeeklySchedule(schedule);
-
-      expect(result.sunday).toBe('00:00/20');
-      expect(result.monday).toBe('00:00/18');
-      expect(result.tuesday).toBe('00:00/20');
-    });
-
-    it('should maintain day structure', () => {
-      const schedule = createEmptyWeeklySchedule();
-
-      const result = serializeWeeklySchedule(schedule);
-
-      expect(result).toHaveProperty('sunday');
-      expect(result).toHaveProperty('monday');
-      expect(result).toHaveProperty('tuesday');
-      expect(result).toHaveProperty('wednesday');
-      expect(result).toHaveProperty('thursday');
-      expect(result).toHaveProperty('friday');
-      expect(result).toHaveProperty('saturday');
-    });
+  it('rejects more than six slots even if they are identical padding', () => {
+    expect(() => parseDaySchedule(Array(7).fill('06:00/20').join(' '))).toThrow('Maximum is 6');
   });
-
-  describe('createEmptyDaySchedule', () => {
-    it('should create schedule with midnight transition', () => {
-      const result = createEmptyDaySchedule();
-
-      expect(result.transitions).toHaveLength(1);
-      expect(result.transitions[0]).toMatchObject({ time: '00:00', temperature: 20 });
-    });
-
-    it('should create new instance each time', () => {
-      const schedule1 = createEmptyDaySchedule();
-      const schedule2 = createEmptyDaySchedule();
-
-      expect(schedule1).not.toBe(schedule2);
-      expect(schedule1.transitions).not.toBe(schedule2.transitions);
-    });
+  it('keeps distinct times with equal temperatures', () => {
+    expect(parseDaySchedule('06:00/20 07:00/20').transitions).toHaveLength(2);
   });
-
-  describe('createEmptyWeeklySchedule', () => {
-    it('should create schedule for all 7 days', () => {
-      const result = createEmptyWeeklySchedule();
-
-      expect(result.sunday.transitions).toHaveLength(1);
-      expect(result.monday.transitions).toHaveLength(1);
-      expect(result.tuesday.transitions).toHaveLength(1);
-      expect(result.wednesday.transitions).toHaveLength(1);
-      expect(result.thursday.transitions).toHaveLength(1);
-      expect(result.friday.transitions).toHaveLength(1);
-      expect(result.saturday.transitions).toHaveLength(1);
-    });
-
-    it('should initialize all days with default temperature', () => {
-      const result = createEmptyWeeklySchedule();
-
-      expect(result.sunday.transitions[0].temperature).toBe(20);
-      expect(result.monday.transitions[0].temperature).toBe(20);
-      expect(result.saturday.transitions[0].temperature).toBe(20);
-    });
+  it('never sorts an unordered payload into validity', () => {
+    expect(() => serializeDaySchedule({ transitions: [{ time: '19:00', temperature: 1 }, { time: '06:00', temperature: 20 }] })).toThrow('chronological');
   });
-
-  describe('ensureMidnightTransition', () => {
-    it('should not modify schedule that already has midnight transition', () => {
-      const schedule: DaySchedule = {
-        transitions: [
-          { time: '00:00', temperature: 20 },
-          { time: '06:00', temperature: 22 }
-        ]
-      };
-
-      const result = ensureMidnightTransition(schedule);
-
-      expect(result.transitions).toHaveLength(2);
-      expect(result.transitions[0]).toMatchObject({ time: '00:00', temperature: 20 });
-    });
-
-    it('should add midnight transition when missing', () => {
-      const schedule: DaySchedule = {
-        transitions: [
-          { time: '06:00', temperature: 22 },
-          { time: '08:00', temperature: 18 }
-        ]
-      };
-
-      const result = ensureMidnightTransition(schedule);
-
-      expect(result.transitions).toHaveLength(3);
-      expect(result.transitions[0]).toMatchObject({ time: '00:00', temperature: 20 });
-    });
-
-    it('should add midnight transition with default temperature 20', () => {
-      const schedule: DaySchedule = {
-        transitions: [{ time: '12:00', temperature: 25 }]
-      };
-
-      const result = ensureMidnightTransition(schedule);
-
-      expect(result.transitions[0].temperature).toBe(20);
-    });
-
-    it('should sort transitions after adding midnight', () => {
-      const schedule: DaySchedule = {
-        transitions: [
-          { time: '22:00', temperature: 18 },
-          { time: '06:00', temperature: 22 }
-        ]
-      };
-
-      const result = ensureMidnightTransition(schedule);
-
-      expect(result.transitions[0].time).toBe('00:00');
-      expect(result.transitions[1].time).toBe('06:00');
-      expect(result.transitions[2].time).toBe('22:00');
-    });
-
-    it('should not mutate original schedule', () => {
-      const schedule: DaySchedule = {
-        transitions: [{ time: '06:00', temperature: 22 }]
-      };
-
-      const result = ensureMidnightTransition(schedule);
-
-      expect(schedule.transitions).toHaveLength(1);
-      expect(result.transitions).toHaveLength(2);
-    });
+  it('rejects conflicting duplicates in the deduplication helper', () => {
+    expect(() => removeDuplicateTransitions([{ time: '06:00', temperature: 20 }, { time: '06:00', temperature: 21 }])).toThrow('Conflicting');
   });
-
+  it('deduplicates identical slots without mutating input', () => {
+    const transitions = [{ time: '06:00', temperature: 20 }, { time: '06:00', temperature: 20 }];
+    expect(removeDuplicateTransitions(transitions)).toHaveLength(1);
+    expect(transitions).toHaveLength(2);
+  });
+  it('reads and serializes all seven days', () => {
+    const schedule = weekly();
+    expect(Object.keys(schedule)).toHaveLength(7);
+    expect(Object.values(serializeWeeklySchedule(schedule))).toEqual(Array(7).fill('06:07/20.5 19:31/1'));
+  });
+  it('rejects missing or invalid days instead of filling defaults', () => {
+    expect(() => parseWeeklySchedule({ monday: '06:00/20' } as MQTTWeeklySchedule)).toThrow();
+    expect(() => serializeWeeklySchedule(createEmptyWeeklySchedule())).toThrow();
+  });
+  it('empty drafts contain no invented setpoint and are independent', () => {
+    const a = createEmptyWeeklySchedule(); const b = createEmptyWeeklySchedule();
+    expect(createEmptyDaySchedule().transitions).toEqual([]);
+    expect(DAYS_OF_WEEK.every(day => a[day].transitions.length === 0)).toBe(true);
+    a.monday.transitions.push({ time: '06:00', temperature: 20 });
+    expect(a.tuesday.transitions).toEqual([]); expect(b.monday.transitions).toEqual([]);
+  });
+  it('generates distinct UI transition IDs', () => { expect(generateTransitionId()).not.toBe(generateTransitionId()); });
+  it('has no diff for equivalent padding, whitespace, or IDs', () => {
+    const a = weekly(); const b = weekly('06:07/20.50 19:31/1 19:31/1');
+    expect(computeScheduleDiff(a, b).hasChanges).toBe(false);
+  });
+  it('publishes only changed days with Hive property names', () => {
+    const a = weekly(); const b = weekly();
+    b.monday.transitions[0].temperature = 21; b.friday.transitions[0].time = '06:09';
+    expect(buildPartialPayload(computeScheduleDiff(a, b))).toEqual({ schedule_monday: '06:07/21 19:31/1', schedule_friday: '06:09/20.5 19:31/1' });
+  });
+  it('detects additions, removals, and changes across the full week', () => {
+    const a = weekly(); const b = weekly('06:07/21 12:00/22 19:31/1');
+    expect(computeScheduleDiff(a, b).changedDays).toHaveLength(7);
+    b.monday.transitions.pop(); expect(computeScheduleDiff(a, b).changes.get('monday')).toBe('06:07/21 12:00/22');
+  });
   describe('sortTransitions', () => {
     it('should sort transitions chronologically', () => {
       const transitions: Transition[] = [
@@ -498,320 +211,8 @@ describe('schedule.ts', () => {
     });
   });
 
-  describe('removeDuplicateTransitions', () => {
-    it('should remove duplicate transitions with same time', () => {
-      const transitions: Transition[] = [
-        { time: '00:00', temperature: 20 },
-        { time: '06:00', temperature: 22 },
-        { time: '06:00', temperature: 24 },
-        { time: '08:00', temperature: 18 }
-      ];
-
-      const result = removeDuplicateTransitions(transitions);
-
-      expect(result).toHaveLength(3);
-      expect(result[0]).toMatchObject({ time: '00:00', temperature: 20 });
-      expect(result[1]).toMatchObject({ time: '06:00', temperature: 22 });
-      expect(result[2]).toMatchObject({ time: '08:00', temperature: 18 });
-    });
-
-    it('should keep first occurrence when duplicates exist', () => {
-      const transitions: Transition[] = [
-        { time: '06:00', temperature: 20 },
-        { time: '06:00', temperature: 22 },
-        { time: '06:00', temperature: 24 }
-      ];
-
-      const result = removeDuplicateTransitions(transitions);
-
-      expect(result).toHaveLength(1);
-      expect(result[0]).toMatchObject({ time: '06:00', temperature: 20 });
-    });
-
-    it('should handle no duplicates', () => {
-      const transitions: Transition[] = [
-        { time: '00:00', temperature: 20 },
-        { time: '06:00', temperature: 22 },
-        { time: '08:00', temperature: 18 }
-      ];
-
-      const result = removeDuplicateTransitions(transitions);
-
-      expect(result).toHaveLength(3);
-      expect(result[0]).toMatchObject({ time: '00:00', temperature: 20 });
-      expect(result[1]).toMatchObject({ time: '06:00', temperature: 22 });
-      expect(result[2]).toMatchObject({ time: '08:00', temperature: 18 });
-    });
-
-    it('should not mutate original array', () => {
-      const transitions: Transition[] = [
-        { time: '06:00', temperature: 20 },
-        { time: '06:00', temperature: 22 }
-      ];
-
-      const result = removeDuplicateTransitions(transitions);
-
-      expect(transitions).toHaveLength(2);
-      expect(result).toHaveLength(1);
-    });
-
-    it('should handle empty array', () => {
-      const transitions: Transition[] = [];
-
-      const result = removeDuplicateTransitions(transitions);
-
-      expect(result).toHaveLength(0);
-    });
-
-    it('should handle single transition', () => {
-      const transitions: Transition[] = [{ time: '00:00', temperature: 20 }];
-
-      const result = removeDuplicateTransitions(transitions);
-
-      expect(result).toHaveLength(1);
-      expect(result[0]).toMatchObject({ time: '00:00', temperature: 20 });
-    });
-
-    it('should preserve order of first occurrences', () => {
-      const transitions: Transition[] = [
-        { time: '12:00', temperature: 24 },
-        { time: '06:00', temperature: 22 },
-        { time: '12:00', temperature: 26 },
-        { time: '00:00', temperature: 20 },
-        { time: '06:00', temperature: 23 }
-      ];
-
-      const result = removeDuplicateTransitions(transitions);
-
-      expect(result).toHaveLength(3);
-      expect(result[0]).toMatchObject({ time: '12:00', temperature: 24 });
-      expect(result[1]).toMatchObject({ time: '06:00', temperature: 22 });
-      expect(result[2]).toMatchObject({ time: '00:00', temperature: 20 });
-    });
-  });
-
-  describe('parseDaySchedule with duplicates', () => {
-    it('should remove duplicate transitions when parsing', () => {
-      const input = '00:00/20 06:00/22 06:00/24 08:00/18';
-      const result = parseDaySchedule(input);
-
-      expect(result.transitions).toHaveLength(3);
-      expect(result.transitions[0]).toMatchObject({ time: '00:00', temperature: 20 });
-      expect(result.transitions[1]).toMatchObject({ time: '06:00', temperature: 22 });
-      expect(result.transitions[2]).toMatchObject({ time: '08:00', temperature: 18 });
-    });
-
-    it('should keep first occurrence when parsing duplicates', () => {
-      const input = '06:00/20 06:00/22 06:00/24';
-      const result = parseDaySchedule(input);
-
-      // Should have 00:00 (auto-added) and 06:00 (first occurrence)
-      expect(result.transitions).toHaveLength(2);
-      expect(result.transitions[0]).toMatchObject({ time: '00:00', temperature: 20 });
-      expect(result.transitions[1]).toMatchObject({ time: '06:00', temperature: 20 });
-    });
-
-    it('should handle multiple sets of duplicates', () => {
-      const input = '06:00/20 06:00/22 08:00/18 08:00/19 10:00/21';
-      const result = parseDaySchedule(input);
-
-      expect(result.transitions).toHaveLength(4);
-      expect(result.transitions[0]).toMatchObject({ time: '00:00', temperature: 20 });
-      expect(result.transitions[1]).toMatchObject({ time: '06:00', temperature: 20 });
-      expect(result.transitions[2]).toMatchObject({ time: '08:00', temperature: 18 });
-      expect(result.transitions[3]).toMatchObject({ time: '10:00', temperature: 21 });
-    });
-  });
-
-  describe('serializeDaySchedule with duplicates', () => {
-    it('should remove duplicate transitions when serializing', () => {
-      const schedule: DaySchedule = {
-        transitions: [
-          { time: '00:00', temperature: 20 },
-          { time: '06:00', temperature: 22 },
-          { time: '06:00', temperature: 24 },
-          { time: '08:00', temperature: 18 }
-        ]
-      };
-
-      const result = serializeDaySchedule(schedule);
-
-      expect(result).toBe('00:00/20 06:00/22 08:00/18');
-    });
-
-    it('should keep first occurrence when serializing duplicates', () => {
-      const schedule: DaySchedule = {
-        transitions: [
-          { time: '06:00', temperature: 20 },
-          { time: '06:00', temperature: 22 },
-          { time: '06:00', temperature: 24 }
-        ]
-      };
-
-      const result = serializeDaySchedule(schedule);
-
-      expect(result).toBe('06:00/20');
-    });
-
-    it('should handle duplicates with decimal temperatures', () => {
-      const schedule: DaySchedule = {
-        transitions: [
-          { time: '00:00', temperature: 20.5 },
-          { time: '06:00', temperature: 22.5 },
-          { time: '06:00', temperature: 24.5 }
-        ]
-      };
-
-      const result = serializeDaySchedule(schedule);
-
-      expect(result).toBe('00:00/20.5 06:00/22.5');
-    });
-  });
-
-  describe('computeScheduleDiff', () => {
-    it('should return empty diff when schedules are identical', () => {
-      const schedule = createEmptyWeeklySchedule();
-      const diff = computeScheduleDiff(schedule, schedule);
-
-      expect(diff.hasChanges).toBe(false);
-      expect(diff.changedDays).toHaveLength(0);
-      expect(diff.changes.size).toBe(0);
-    });
-
-    it('should detect single day change', () => {
-      const original = createEmptyWeeklySchedule();
-      const modified = { ...createEmptyWeeklySchedule() };
-      modified.monday = { transitions: [{ time: '00:00', temperature: 25 }] };
-
-      const diff = computeScheduleDiff(original, modified);
-
-      expect(diff.hasChanges).toBe(true);
-      expect(diff.changedDays).toEqual(['monday']);
-      expect(diff.changes.get('monday')).toBe('00:00/25');
-    });
-
-    it('should detect multiple day changes', () => {
-      const original = createEmptyWeeklySchedule();
-      const modified = { ...createEmptyWeeklySchedule() };
-      modified.monday = { transitions: [{ time: '00:00', temperature: 25 }] };
-      modified.friday = { transitions: [{ time: '00:00', temperature: 22 }] };
-
-      const diff = computeScheduleDiff(original, modified);
-
-      expect(diff.hasChanges).toBe(true);
-      expect(diff.changedDays).toHaveLength(2);
-      expect(diff.changedDays).toContain('monday');
-      expect(diff.changedDays).toContain('friday');
-      expect(diff.changes.get('monday')).toBe('00:00/25');
-      expect(diff.changes.get('friday')).toBe('00:00/22');
-    });
-
-    it('should ignore order differences in transitions', () => {
-      // Same transitions in different order should not be detected as change
-      const original = createEmptyWeeklySchedule();
-      original.monday = {
-        transitions: [
-          { time: '00:00', temperature: 20 },
-          { time: '08:00', temperature: 22 }
-        ]
-      };
-
-      const modified = createEmptyWeeklySchedule();
-      modified.monday = {
-        transitions: [
-          { time: '08:00', temperature: 22 },
-          { time: '00:00', temperature: 20 }
-        ]
-      };
-
-      const diff = computeScheduleDiff(original, modified);
-
-      expect(diff.hasChanges).toBe(false);
-      expect(diff.changedDays).toHaveLength(0);
-    });
-
-    it('should detect all days changed when comparing different schedules', () => {
-      const original = createEmptyWeeklySchedule();
-      const modified = createEmptyWeeklySchedule();
-
-      // Change every day to different temperature
-      modified.sunday.transitions[0].temperature = 18;
-      modified.monday.transitions[0].temperature = 19;
-      modified.tuesday.transitions[0].temperature = 21;
-      modified.wednesday.transitions[0].temperature = 22;
-      modified.thursday.transitions[0].temperature = 23;
-      modified.friday.transitions[0].temperature = 24;
-      modified.saturday.transitions[0].temperature = 25;
-
-      const diff = computeScheduleDiff(original, modified);
-
-      expect(diff.hasChanges).toBe(true);
-      expect(diff.changedDays).toHaveLength(7);
-      expect(diff.changedDays).toContain('sunday');
-      expect(diff.changedDays).toContain('monday');
-      expect(diff.changedDays).toContain('saturday');
-    });
-
-    it('should use serialized comparison to handle equivalent representations', () => {
-      const original = createEmptyWeeklySchedule();
-      original.monday = {
-        transitions: [
-          { time: '00:00', temperature: 20.0 }
-        ]
-      };
-
-      const modified = createEmptyWeeklySchedule();
-      modified.monday = {
-        transitions: [
-          { time: '00:00', temperature: 20 }
-        ]
-      };
-
-      const diff = computeScheduleDiff(original, modified);
-
-      // 20.0 and 20 should serialize to same string "00:00/20"
-      expect(diff.hasChanges).toBe(false);
-    });
-
-    it('should detect change when transition added', () => {
-      const original = createEmptyWeeklySchedule();
-      const modified = createEmptyWeeklySchedule();
-      modified.wednesday = {
-        transitions: [
-          { time: '00:00', temperature: 20 },
-          { time: '08:00', temperature: 22 },
-          { time: '17:00', temperature: 18 }
-        ]
-      };
-
-      const diff = computeScheduleDiff(original, modified);
-
-      expect(diff.hasChanges).toBe(true);
-      expect(diff.changedDays).toEqual(['wednesday']);
-      expect(diff.changes.get('wednesday')).toBe('00:00/20 08:00/22 17:00/18');
-    });
-
-    it('should detect change when transition removed', () => {
-      const original = createEmptyWeeklySchedule();
-      original.thursday = {
-        transitions: [
-          { time: '00:00', temperature: 20 },
-          { time: '08:00', temperature: 22 }
-        ]
-      };
-
-      const modified = createEmptyWeeklySchedule();
-      // Uses default single 00:00/20 transition
-
-      const diff = computeScheduleDiff(original, modified);
-
-      expect(diff.hasChanges).toBe(true);
-      expect(diff.changedDays).toEqual(['thursday']);
-    });
-  });
-
   describe('buildPartialPayload', () => {
-    it('should build payload with weekly_schedule_ prefix', () => {
+    it('should build payload with schedule_ prefix', () => {
       const changes = new Map<DayOfWeek, string>();
       changes.set('monday', '00:00/20 08:00/22');
 
@@ -824,7 +225,7 @@ describe('schedule.ts', () => {
       const payload = buildPartialPayload(diff);
 
       expect(payload).toEqual({
-        weekly_schedule_monday: '00:00/20 08:00/22'
+        schedule_monday: '00:00/20 08:00/22'
       });
     });
 
@@ -842,8 +243,8 @@ describe('schedule.ts', () => {
       const payload = buildPartialPayload(diff);
 
       expect(payload).toEqual({
-        weekly_schedule_monday: '00:00/20',
-        weekly_schedule_wednesday: '00:00/22 12:00/18'
+        schedule_monday: '00:00/20',
+        schedule_wednesday: '00:00/22 12:00/18'
       });
     });
 
@@ -878,9 +279,9 @@ describe('schedule.ts', () => {
       const payload = buildPartialPayload(diff);
 
       expect(Object.keys(payload)).toHaveLength(7);
-      expect(payload.weekly_schedule_sunday).toBe('00:00/18');
-      expect(payload.weekly_schedule_monday).toBe('00:00/19');
-      expect(payload.weekly_schedule_saturday).toBe('00:00/24');
+      expect(payload.schedule_sunday).toBe('00:00/18');
+      expect(payload.schedule_monday).toBe('00:00/19');
+      expect(payload.schedule_saturday).toBe('00:00/24');
     });
 
     it('should preserve complex schedule strings in payload', () => {
@@ -896,7 +297,7 @@ describe('schedule.ts', () => {
       const payload = buildPartialPayload(diff);
 
       expect(payload).toEqual({
-        weekly_schedule_friday: '00:00/18 06:00/21 08:00/19 17:00/22 22:00/18'
+        schedule_friday: '00:00/18 06:00/21 08:00/19 17:00/22 22:00/18'
       });
     });
   });

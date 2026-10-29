@@ -7,7 +7,7 @@ import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { repeat } from 'lit/directives/repeat.js';
 import { DayOfWeek, DaySchedule, Transition } from '../models/types';
-import { copyDaySchedule, ensureMidnightTransition, sortTransitions, generateTransitionId } from '../models/schedule';
+import { copyDaySchedule, sortTransitions, generateTransitionId } from '../models/schedule';
 import { validateDaySchedule } from '../utils/validation';
 import { cardStyles } from '../styles/card-styles';
 import './transition-editor';
@@ -29,7 +29,7 @@ export interface CopyRequestedEvent {
  * Day Schedule Editor Component
  * Provides a modal dialog for editing a single day's heating schedule
  */
-@customElement('day-schedule-editor')
+@customElement('hive-day-schedule-editor')
 export class DayScheduleEditor extends LitElement {
   static styles = [
     cardStyles,
@@ -244,7 +244,7 @@ export class DayScheduleEditor extends LitElement {
    * Auto-saves after deleting
    */
   private _deleteTransitionById(id: string | undefined) {
-    if (!id) return;
+    if (!id || this._workingSchedule.transitions.length <= 1) return;
 
     const transitions = this._workingSchedule.transitions.filter(t => t.id !== id);
 
@@ -261,20 +261,7 @@ export class DayScheduleEditor extends LitElement {
    * Returns true if valid, false otherwise
    */
   private _validate(): boolean {
-    // First, apply auto-fixes
-    let schedule = { ...this._workingSchedule };
-
-    // Ensure midnight transition
-    schedule = ensureMidnightTransition(schedule);
-
-    // Sort transitions
-    schedule.transitions = sortTransitions(schedule.transitions);
-
-    // Update working schedule with fixed version
-    this._workingSchedule = schedule;
-
-    // Now validate
-    const result = validateDaySchedule(schedule);
+    const result = validateDaySchedule(this._workingSchedule);
     this._errors = result.errors;
 
     return result.valid;
@@ -286,16 +273,7 @@ export class DayScheduleEditor extends LitElement {
    * This is called automatically whenever transitions are added, updated, or deleted
    */
   private _autoSave() {
-    // Apply auto-fixes (midnight transition, sorting, deduplication)
-    let schedule = { ...this._workingSchedule };
-    schedule = ensureMidnightTransition(schedule);
-    schedule.transitions = sortTransitions(schedule.transitions);
-
-    // Update working schedule with fixed version
-    this._workingSchedule = schedule;
-
-    // Validate to show any errors, but don't block saving
-    const result = validateDaySchedule(schedule);
+    const result = validateDaySchedule(this._workingSchedule);
     this._errors = result.errors;
 
     // Dispatch schedule-changed event (auto-save)
@@ -425,13 +403,13 @@ export class DayScheduleEditor extends LitElement {
                     this._workingSchedule.transitions,
                     (transition) => transition.id,
                     (transition, index) => html`
-                      <transition-editor
+                      <hive-transition-editor
                         .index=${index}
                         .transition=${transition}
                         .canDelete=${this._workingSchedule.transitions.length > 1}
                         @transition-changed=${this._handleTransitionChange}
                         @transition-deleted=${this._handleTransitionDelete}
-                      ></transition-editor>
+                      ></hive-transition-editor>
                     `
                   )}
                 </div>
@@ -443,9 +421,9 @@ export class DayScheduleEditor extends LitElement {
                   class="button button-primary"
                   ?disabled=${!canAddTransition}
                   @click=${this._addTransition}
-                  title=${canAddTransition ? 'Add new transition' : 'Maximum 6 transitions per day'}
+                  title=${canAddTransition ? 'Add a time and temperature' : 'Maximum 6 setpoints per day'}
                 >
-                  + Add Transition
+                  + Add setpoint
                 </button>
                 <button
                   class="button button-secondary"
@@ -464,6 +442,6 @@ export class DayScheduleEditor extends LitElement {
 
 declare global {
   interface HTMLElementTagNameMap {
-    'day-schedule-editor': DayScheduleEditor;
+    'hive-day-schedule-editor': DayScheduleEditor;
   }
 }

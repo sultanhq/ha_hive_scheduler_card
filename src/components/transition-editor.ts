@@ -10,7 +10,7 @@ import { cardStyles, getTemperatureColor } from '../styles/card-styles';
  * - transition-changed: when time or temperature changes
  * - transition-deleted: when delete button is clicked
  */
-@customElement('transition-editor')
+@customElement('hive-transition-editor')
 export class TransitionEditor extends LitElement {
   static styles = [
     cardStyles,
@@ -146,12 +146,6 @@ export class TransitionEditor extends LitElement {
         width: 100%;
         height: 8px;
         border-radius: 4px;
-        background: linear-gradient(
-          to right,
-          rgb(0, 150, 255) 0%,
-          rgb(100, 200, 50) 50%,
-          rgb(255, 80, 20) 100%
-        );
         outline: none;
         -webkit-appearance: none;
         appearance: none;
@@ -165,7 +159,7 @@ export class TransitionEditor extends LitElement {
         height: 22px;
         border-radius: 50%;
         background: white;
-        border: 3px solid var(--primary-color);
+        border: 3px solid var(--temperature-color, var(--primary-color));
         cursor: pointer;
         box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
         transition: transform 0.2s ease;
@@ -184,7 +178,7 @@ export class TransitionEditor extends LitElement {
         height: 22px;
         border-radius: 50%;
         background: white;
-        border: 3px solid var(--primary-color);
+        border: 3px solid var(--temperature-color, var(--primary-color));
         cursor: pointer;
         box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
         transition: transform 0.2s ease;
@@ -313,18 +307,10 @@ export class TransitionEditor extends LitElement {
   }
 
   /**
-   * Get the minute from the current time, snapped to nearest 15-minute interval
+   * Get the minute from the current time, at native minute precision
    */
   private _getMinute(): string {
-    const time = this._getTime();
-    const minute = parseInt(time.split(':')[1] || '0', 10);
-
-    // Snap to nearest 15-minute interval
-    const snapped = Math.round(minute / 15) * 15;
-    // Handle 60 -> 00 case
-    const validMinute = snapped >= 60 ? 0 : snapped;
-
-    return validMinute.toString().padStart(2, '0');
+    return this._getTime().split(':')[1] || '00';
   }
 
   /**
@@ -415,11 +401,11 @@ export class TransitionEditor extends LitElement {
   }
 
   /**
-   * Clamp temperature to valid range (4-35°C) in 0.5°C steps
+   * Clamp an explicit slider gesture to 5–32°C in 0.5°C steps
    */
   private _clampTemperature(temp: number): number {
     // Clamp to range
-    let clamped = Math.max(4, Math.min(35, temp));
+    let clamped = Math.max(5, Math.min(32, temp));
 
     // Round to nearest 0.5
     clamped = Math.round(clamped * 2) / 2;
@@ -455,8 +441,7 @@ export class TransitionEditor extends LitElement {
       return html`<div class="transition-editor">Loading...</div>`;
     }
 
-    const isFirstTransition = this.index === 0;
-    const timeInputDisabled = isFirstTransition || this.disabled;
+    const timeInputDisabled = this.disabled;
     const hasError = this._validationError !== null;
 
     return html`
@@ -477,7 +462,7 @@ export class TransitionEditor extends LitElement {
                 .value=${this._getHour()}
                 @change=${this._handleHourChange}
                 ?disabled=${timeInputDisabled}
-                title=${isFirstTransition ? 'Midnight transition cannot be changed' : 'Select hour'}
+                title="Select hour"
               >
                 ${Array.from({ length: 24 }, (_, i) => i.toString().padStart(2, '0')).map(
                   (hour) => html`<option value=${hour} ?selected=${hour === this._getHour()}>${hour}</option>`
@@ -489,9 +474,9 @@ export class TransitionEditor extends LitElement {
                 .value=${this._getMinute()}
                 @change=${this._handleMinuteChange}
                 ?disabled=${timeInputDisabled}
-                title=${isFirstTransition ? 'Midnight transition cannot be changed' : 'Select minutes'}
+                title="Select minutes"
               >
-                ${['00', '15', '30', '45'].map(
+                ${Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0')).map(
                   (minute) => html`<option value=${minute} ?selected=${minute === this._getMinute()}>${minute}</option>`
                 )}
               </select>
@@ -499,27 +484,30 @@ export class TransitionEditor extends LitElement {
             ${hasError
               ? html`<div class="error-message">${this._validationError}</div>`
               : ''}
-            ${isFirstTransition
-              ? html`<div class="error-message" style="color: var(--info-color, #2196F3);">
-                  Fixed at 00:00
-                </div>`
-              : ''}
+
           </div>
 
           <!-- Temperature Slider -->
           <div class="temperature-field">
             <label class="field-label">Temperature</label>
+            <select aria-label="Heating mode" .value=${this.transition.temperature === 1 ? 'off' : 'heat'}
+              ?disabled=${this.disabled}
+              @change=${(e: Event) => this._dispatchTransitionChanged({ ...this.transition, temperature: (e.target as HTMLSelectElement).value === 'off' ? 1 : 20 })}>
+              <option value="heat" ?selected=${this.transition.temperature !== 1}>Heating</option>
+              <option value="off" ?selected=${this.transition.temperature === 1}>Heating off (1°C)</option>
+            </select>
             <div class="temperature-control">
               <input
                 type="range"
                 class="temperature-slider"
-                min="4"
-                max="35"
+                style="--temperature-color: ${this._getTemperatureColor()}"
+                min="5"
+                max="32"
                 step="0.5"
                 .value=${this._getTemperature().toString()}
                 @input=${this._handleTemperatureChange}
-                ?disabled=${this.disabled}
-                title="Adjust temperature (4-35°C)"
+                ?disabled=${this.disabled || this.transition.temperature === 1}
+                title="Adjust heating temperature (5–32°C)"
               />
               <div
                 class="temperature-display"
@@ -538,8 +526,8 @@ export class TransitionEditor extends LitElement {
                 <button
                   class="button-icon remove"
                   @click=${this._handleDelete}
-                  title="Delete transition"
-                  aria-label="Delete transition ${this.index + 1}"
+                  title="Delete setpoint"
+                  aria-label="Delete setpoint ${this.index + 1}"
                 >
                   <svg
                     width="16"
@@ -565,6 +553,6 @@ export class TransitionEditor extends LitElement {
 
 declare global {
   interface HTMLElementTagNameMap {
-    'transition-editor': TransitionEditor;
+    'hive-transition-editor': TransitionEditor;
   }
 }

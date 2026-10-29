@@ -1,34 +1,35 @@
 {
-  "name": "trvzb-scheduler-card",
+  "name": "hive-scheduler-card",
   "version": "1.0.0",
-  "description": "Home Assistant custom card for managing Sonoff TRVZB thermostat schedules via Zigbee2MQTT",
-  "main": "dist/trvzb-scheduler-card.js",
+  "description": "Home Assistant dashboard card for native Hive SLR1c heating schedules via Zigbee2MQTT",
+  "main": "dist/hive-scheduler-card.js",
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "https://github.com/abaddon/ha_sonoff_TRVZB_scheduler_card.git"
+    "url": "https://github.com/sultanhq/ha_hive_scheduler_card.git"
   },
   "bugs": {
-    "url": "https://github.com/abaddon/ha_sonoff_TRVZB_scheduler_card/issues"
+    "url": "https://github.com/sultanhq/ha_hive_scheduler_card/issues"
   },
-  "homepage": "https://github.com/abaddon/ha_sonoff_TRVZB_scheduler_card#readme",
+  "homepage": "https://github.com/sultanhq/ha_hive_scheduler_card#readme",
   "scripts": {
     "build": "rollup -c",
     "dev": "rollup -c -w",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
   },
   "keywords": [
     "home-assistant",
     "hacs",
     "custom-card",
     "lovelace",
-    "sonoff",
-    "trvzb",
     "thermostat",
     "heating",
     "schedule",
-    "zigbee2mqtt"
+    "zigbee2mqtt",
+    "hive",
+    "slr1c"
   ],
   "author": "abaddon",
   "license": "MIT",
@@ -46,5 +47,8 @@
     "tslib": "^2.8.1",
     "typescript": "^5.3.3",
     "vitest": "^1.2.1"
-  }
+  },
+  "contributors": [
+    "sultanhq"
+  ]
 }

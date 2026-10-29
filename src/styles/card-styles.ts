@@ -1,35 +1,31 @@
-import { css } from 'lit';
+import { css, unsafeCSS } from 'lit';
 
-/**
- * Temperature color gradient function
- * Maps temperature from 4°C (blue) to 35°C (red)
- * with a smooth transition through green at ~20°C
- */
+// Warm colours pass through yellow to avoid a muddy green/red blend.
+const warmTemperatureStops = [
+  [15, 46, 184, 92],
+  [17, 240, 190, 40],
+  [20, 239, 83, 80],
+  [25, 255, 24, 24],
+] as const;
+
+/** Shared palette: blue below 10°C, green at 10–15°C, then warmer towards red. */
 export function getTemperatureColor(temp: number): string {
-  // Clamp temperature to valid range
-  const clampedTemp = Math.max(4, Math.min(35, temp));
+  const clampedTemp = Math.max(1, Math.min(32, temp));
+  if (clampedTemp < 10) return 'rgb(0, 150, 255)';
+  if (clampedTemp <= 15) return 'rgb(46, 184, 92)';
+  if (clampedTemp > 25) return 'rgb(255, 0, 0)';
 
-  // Normalize temperature to 0-1 range
-  const normalized = Math.max(0, Math.min(1, (clampedTemp - 14) / (22 - 14)));
-
-  let r: number, g: number, b: number;
-
-  if (normalized < 0.5) {
-    // Blue (4°C) to Green (19.5°C)
-    const t = normalized * 2; // 0-1 for first half
-    r = Math.round(0 + (100 - 0) * t);
-    g = Math.round(150 + (200 - 150) * t);
-    b = Math.round(255 + (50 - 255) * t);
-  } else {
-    // Green (19.5°C) to Red (35°C)
-    const t = (normalized - 0.5) * 2; // 0-1 for second half
-    r = Math.round(100 + (255 - 100) * t);
-    g = Math.round(200 + (80 - 200) * t);
-    b = Math.round(50 + (20 - 50) * t);
-  }
-
-  return `rgb(${r}, ${g}, ${b})`;
+  const upperIndex = warmTemperatureStops.findIndex(stop => clampedTemp <= stop[0]);
+  const lower = warmTemperatureStops[upperIndex - 1];
+  const upper = warmTemperatureStops[upperIndex];
+  const t = (clampedTemp - lower[0]) / (upper[0] - lower[0]);
+  const channels = [1, 2, 3].map(channel => Math.round(lower[channel] + (upper[channel] - lower[channel]) * t));
+  return `rgb(${channels.join(', ')})`;
 }
+
+// Position palette stops on the heating slider’s actual 5–32°C scale.
+const temperatureSliderGradient = `linear-gradient(to right, ${[5, 9.5, 10, 15, 17, 20, 25, 25.5, 32]
+  .map(temp => `${getTemperatureColor(temp)} ${((temp - 5) / 27) * 100}%`).join(', ')})`;
 
 /**
  * Main card styles
@@ -42,6 +38,8 @@ export const cardStyles = css`
 
   /* Card Container */
   ha-card {
+    display: block;
+    box-sizing: border-box;
     padding: 16px;
     border-radius: var(--ha-card-border-radius, 12px);
     background: var(--card-background-color);
@@ -53,6 +51,8 @@ export const cardStyles = css`
     display: flex;
     align-items: center;
     justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
     margin-bottom: 12px;
     padding-bottom: 8px;
     border-bottom: 1px solid var(--divider-color);
@@ -341,12 +341,7 @@ export const cardStyles = css`
     width: 100%;
     height: 6px;
     border-radius: 3px;
-    background: linear-gradient(
-      to right,
-      rgb(0, 150, 255) 0%,
-      rgb(100, 200, 50) 50%,
-      rgb(255, 80, 20) 100%
-    );
+    background: ${unsafeCSS(temperatureSliderGradient)};
     outline: none;
     -webkit-appearance: none;
     appearance: none;

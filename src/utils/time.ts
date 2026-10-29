@@ -1,5 +1,5 @@
 /**
- * Time utilities for TRVZB Scheduler Card
+ * Time utilities for Hive Scheduler Card
  * All functions work with HH:mm format (24-hour)
  */
 

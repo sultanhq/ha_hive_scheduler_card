@@ -62,8 +62,8 @@ describe('mqtt-sanitizer', () => {
       });
 
       it('should use custom fallback when provided', () => {
-        const result = sanitizeMqttTopicSegment('', 'default_trvzb');
-        expect(result.value).toBe('default_trvzb');
+        const result = sanitizeMqttTopicSegment('', 'default_hive');
+        expect(result.value).toBe('default_hive');
       });
 
       it('should handle null defensively', () => {
@@ -95,8 +95,8 @@ describe('mqtt-sanitizer', () => {
 
     describe('should not modify valid names', () => {
       it('should not modify standard device names', () => {
-        const result = sanitizeMqttTopicSegment('living_room_trvzb');
-        expect(result.value).toBe('living_room_trvzb');
+        const result = sanitizeMqttTopicSegment('living_room_hive');
+        expect(result.value).toBe('living_room_hive');
         expect(result.wasModified).toBe(false);
       });
 
@@ -108,14 +108,14 @@ describe('mqtt-sanitizer', () => {
       });
 
       it('should not modify names with hyphens', () => {
-        const result = sanitizeMqttTopicSegment('living-room-trvzb');
-        expect(result.value).toBe('living-room-trvzb');
+        const result = sanitizeMqttTopicSegment('living-room-hive');
+        expect(result.value).toBe('living-room-hive');
         expect(result.wasModified).toBe(false);
       });
 
       it('should not modify names with numbers', () => {
-        const result = sanitizeMqttTopicSegment('trvzb_01_bedroom');
-        expect(result.value).toBe('trvzb_01_bedroom');
+        const result = sanitizeMqttTopicSegment('hive_01_bedroom');
+        expect(result.value).toBe('hive_01_bedroom');
         expect(result.wasModified).toBe(false);
       });
     });
@@ -123,7 +123,7 @@ describe('mqtt-sanitizer', () => {
 
   describe('isValidMqttTopicSegment', () => {
     it('should return true for valid names', () => {
-      expect(isValidMqttTopicSegment('living_room_trvzb')).toBe(true);
+      expect(isValidMqttTopicSegment('living_room_hive')).toBe(true);
       expect(isValidMqttTopicSegment('device-name')).toBe(true);
       expect(isValidMqttTopicSegment('device.name')).toBe(true);
     });

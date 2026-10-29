@@ -1,3 +1,5 @@
+> Historical upstream design. Its assumptions are superseded by the Hive implementation and README, especially verified saving, entity discovery, midnight handling, and temperatures.
+
 # Feature: Bulk Schedule Update
 
 **Bounded Context:** Schedule Management
@@ -48,9 +50,9 @@ interface ScheduleDiff {
 ```typescript
 /**
  * Partial MQTT payload containing only modified days
- * Example: { "weekly_schedule_monday": "00:00/18 06:00/21", "weekly_schedule_friday": "00:00/20" }
+ * Example: { "schedule_monday": "00:00/18 06:00/21", "schedule_friday": "00:00/20" }
  */
-type MQTTPartialPayload = Partial<Record<`weekly_schedule_${DayOfWeek}`, string>>;
+type MQTTPartialPayload = Partial<Record<`schedule_${DayOfWeek}`, string>>;
 ```
 
 ---
@@ -77,7 +79,7 @@ serializeWeeklySchedule(schedule) -> MQTTWeeklySchedule (all 7 days)
        v
 for (const day of DAYS_OF_WEEK) {
     hass.callService('mqtt', 'publish', {
-        topic: `zigbee2mqtt/${device}/set/weekly_schedule_${day}`,
+        topic: `zigbee2mqtt/${device}/set/schedule_${day}`,
         payload: mqttSchedule[day]  // string
     });
 }
@@ -199,7 +201,7 @@ File: `src/models/types.ts`
  * Partial MQTT payload for bulk updates
  * Contains only the days that need to be updated
  */
-export type MQTTPartialPayload = Partial<Record<`weekly_schedule_${DayOfWeek}`, string>>;
+export type MQTTPartialPayload = Partial<Record<`schedule_${DayOfWeek}`, string>>;
 
 /**
  * Result of computing schedule differences
@@ -253,13 +255,13 @@ export function computeScheduleDiff(
  * Build the MQTT partial payload from a schedule diff
  *
  * @param diff - The computed schedule differences
- * @returns Object with weekly_schedule_{day} keys for changed days only
+ * @returns Object with schedule_{day} keys for changed days only
  */
 export function buildPartialPayload(diff: ScheduleDiff): MQTTPartialPayload {
   const payload: MQTTPartialPayload = {};
 
   for (const [day, serialized] of diff.changes) {
-    payload[`weekly_schedule_${day}`] = serialized;
+    payload[`schedule_${day}`] = serialized;
   }
 
   return payload;
@@ -360,8 +362,8 @@ export async function saveScheduleLegacy(
 File: `src/card.ts`
 
 ```typescript
-@customElement('trvzb-scheduler-card')
-export class TRVZBSchedulerCard extends LitElement {
+@customElement('hive-scheduler-card')
+export class HiveSchedulerCard extends LitElement {
   // Existing state
   @state() private _schedule: WeeklySchedule | null = null;
 
@@ -536,7 +538,7 @@ describe('computeScheduleDiff', () => {
 });
 
 describe('buildPartialPayload', () => {
-  it('should build payload with weekly_schedule_ prefix', () => {
+  it('should build payload with schedule_ prefix', () => {
     const changes = new Map<DayOfWeek, string>();
     changes.set('monday', '00:00/20 08:00/22');
 
@@ -549,7 +551,7 @@ describe('buildPartialPayload', () => {
     const payload = buildPartialPayload(diff);
 
     expect(payload).toEqual({
-      weekly_schedule_monday: '00:00/20 08:00/22'
+      schedule_monday: '00:00/20 08:00/22'
     });
   });
 
@@ -567,8 +569,8 @@ describe('buildPartialPayload', () => {
     const payload = buildPartialPayload(diff);
 
     expect(payload).toEqual({
-      weekly_schedule_monday: '00:00/20',
-      weekly_schedule_wednesday: '00:00/22 12:00/18'
+      schedule_monday: '00:00/20',
+      schedule_wednesday: '00:00/22 12:00/18'
     });
   });
 
@@ -614,13 +616,13 @@ describe('Save Operation - Bulk Update', () => {
     expect(calls.length).toBe(1);
 
     // Verify topic is base /set (not per-day)
-    expect(calls[0].data.topic).toBe('zigbee2mqtt/living_room_trvzb/set');
+    expect(calls[0].data.topic).toBe('zigbee2mqtt/living_room_hive/set');
 
     // Verify payload is JSON with only Monday
     const payload = JSON.parse(calls[0].data.payload as string);
-    expect(payload).toHaveProperty('weekly_schedule_monday');
-    expect(payload).not.toHaveProperty('weekly_schedule_tuesday');
-    expect(payload).not.toHaveProperty('weekly_schedule_sunday');
+    expect(payload).toHaveProperty('schedule_monday');
+    expect(payload).not.toHaveProperty('schedule_tuesday');
+    expect(payload).not.toHaveProperty('schedule_sunday');
   });
 
   it('should include multiple changed days in single payload', async () => {
@@ -655,8 +657,8 @@ describe('Save Operation - Bulk Update', () => {
 
     const payload = JSON.parse(calls[0].data.payload as string);
     expect(Object.keys(payload).length).toBe(2);
-    expect(payload).toHaveProperty('weekly_schedule_monday');
-    expect(payload).toHaveProperty('weekly_schedule_friday');
+    expect(payload).toHaveProperty('schedule_monday');
+    expect(payload).toHaveProperty('schedule_friday');
   });
 
   it('should not publish MQTT when no changes detected', async () => {

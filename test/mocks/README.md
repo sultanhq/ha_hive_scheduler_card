@@ -1,6 +1,6 @@
 # Test Mocks
 
-This directory contains mock objects and utilities for testing the TRVZB Scheduler Card.
+This directory contains mock objects and utilities for testing the Hive Scheduler Card.
 
 ## hass-mock.ts
 
@@ -11,7 +11,7 @@ Comprehensive Home Assistant mocking utilities for unit and integration tests.
 The `hass-mock.ts` module provides everything needed to simulate Home Assistant environments in tests:
 
 - Mock Home Assistant objects
-- Mock TRVZB climate entities
+- Mock Hive SLR1c climate entities
 - Service call recording and assertions
 - Sample test data
 - Test scenario helpers
@@ -34,14 +34,14 @@ import { createMockHass } from './mocks/hass-mock';
 
 const hass = createMockHass({
   states: {
-    'climate.living_room': createMockTRVZBEntity('living_room')
+    'climate.living_room': createMockHiveEntity('living_room')
   }
 });
 ```
 
-#### `createMockTRVZBEntity(friendlyName, schedule?)`
+#### `createMockHiveEntity(friendlyName, schedule?)`
 
-Creates a realistic mock TRVZB climate entity with proper attributes.
+Creates a realistic mock Hive SLR1c climate entity with proper attributes.
 
 **Parameters:**
 - `friendlyName` - Entity name (will be converted to entity_id as `climate.{name}`)
@@ -58,15 +58,15 @@ Creates a realistic mock TRVZB climate entity with proper attributes.
 
 **Example:**
 ```typescript
-import { createMockTRVZBEntity } from './mocks/hass-mock';
+import { createMockHiveEntity } from './mocks/hass-mock';
 
 // Create with default schedule
-const entity = createMockTRVZBEntity('bedroom_radiator');
+const entity = createMockHiveEntity('bedroom_radiator');
 console.log(entity.entity_id); // "climate.bedroom_radiator"
 
 // Create with custom schedule
 const customSchedule = createMockSchedule('minimal');
-const entity2 = createMockTRVZBEntity('living_room', customSchedule);
+const entity2 = createMockHiveEntity('living_room', customSchedule);
 ```
 
 #### `createMockSchedule(variant?)`
@@ -164,7 +164,7 @@ Creates a complete test environment with hass, recorder, and entity.
 ```typescript
 import { createTestScenario } from './mocks/hass-mock';
 
-const scenario = createTestScenario('living_room_trvzb');
+const scenario = createTestScenario('living_room_hive');
 
 // Use in tests
 expect(scenario.hass.states[scenario.entityId]).toBeDefined();
@@ -228,7 +228,7 @@ Pre-defined test data for common scenarios:
 
 #### `SAMPLE_ENTITY_ID`
 ```typescript
-"climate.living_room_trvzb"
+"climate.living_room_hive"
 ```
 
 #### `SAMPLE_DAY_SCHEDULE_STRING`
@@ -256,7 +256,7 @@ describe('Schedule Editor', () => {
   let scenario: ReturnType<typeof createTestScenario>;
 
   beforeEach(() => {
-    scenario = createTestScenario('living_room_trvzb');
+    scenario = createTestScenario('living_room_hive');
   });
 
   it('should save schedule to Home Assistant', async () => {
@@ -264,13 +264,13 @@ describe('Schedule Editor', () => {
 
     // Simulate saving schedule
     await scenario.hass.callService('mqtt', 'publish', {
-      topic: 'zigbee2mqtt/living_room_trvzb/set',
+      topic: 'zigbee2mqtt/living_room_hive/set',
       payload: JSON.stringify({ weekly_schedule: newSchedule })
     });
 
     // Verify the service was called correctly
     expect(scenario.recorder.expectServiceCalled('mqtt', 'publish', {
-      topic: 'zigbee2mqtt/living_room_trvzb/set'
+      topic: 'zigbee2mqtt/living_room_hive/set'
     })).toBe(true);
 
     const lastCall = scenario.recorder.getLastCall();

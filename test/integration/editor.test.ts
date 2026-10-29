@@ -1,17 +1,17 @@
 /**
  * Integration tests for editor.ts
- * Tests the TRVZB Scheduler Card configuration editor
+ * Tests the Hive Scheduler Card configuration editor
  */
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import '../../src/editor';
-import { createMockHass, createMockTRVZBEntity } from '../mocks/hass-mock';
-import type { HomeAssistant, TRVZBSchedulerCardConfig } from '../../src/models/types';
+import { createMockHass, createMockHiveEntity } from '../mocks/hass-mock';
+import type { HomeAssistant, HiveSchedulerCardConfig } from '../../src/models/types';
 
 // Define element interface for TypeScript
-interface TRVZBSchedulerCardEditor extends HTMLElement {
+interface HiveSchedulerCardEditor extends HTMLElement {
   hass: HomeAssistant;
-  setConfig(config: TRVZBSchedulerCardConfig): void;
+  setConfig(config: HiveSchedulerCardConfig): void;
   updateComplete: Promise<boolean>;
   shadowRoot: ShadowRoot | null;
 }
@@ -20,26 +20,26 @@ interface TRVZBSchedulerCardEditor extends HTMLElement {
  * Helper function to create an editor element
  */
 async function createEditor(
-  config: Partial<TRVZBSchedulerCardConfig> = {},
+  config: Partial<HiveSchedulerCardConfig> = {},
   hass?: HomeAssistant
-): Promise<TRVZBSchedulerCardEditor> {
-  const editor = document.createElement('trvzb-scheduler-card-editor') as TRVZBSchedulerCardEditor;
+): Promise<HiveSchedulerCardEditor> {
+  const editor = document.createElement('hive-scheduler-card-editor') as HiveSchedulerCardEditor;
   document.body.appendChild(editor);
 
   // Set up mock hass if not provided
   const mockHass = hass || createMockHass({
     states: {
-      'climate.living_room_trvzb': createMockTRVZBEntity('living_room_trvzb'),
-      'climate.bedroom_trvzb': createMockTRVZBEntity('bedroom_trvzb'),
-      'climate.office_thermostat': createMockTRVZBEntity('office_thermostat'),
+      'climate.living_room_hive': createMockHiveEntity('living_room_hive'),
+      'climate.bedroom_hive': createMockHiveEntity('bedroom_hive'),
+      'climate.office_thermostat': createMockHiveEntity('office_thermostat'),
     },
   });
 
   editor.hass = mockHass;
 
-  const defaultConfig: TRVZBSchedulerCardConfig = {
-    type: 'trvzb-scheduler-card',
-    entity: 'climate.living_room_trvzb',
+  const defaultConfig: HiveSchedulerCardConfig = {
+    type: 'hive-scheduler-card',
+    entity: 'climate.living_room_hive',
     ...config,
   };
 
@@ -55,7 +55,7 @@ async function createEditor(
  * Helper function to query elements in shadow DOM
  */
 function querySelector<T extends Element>(
-  editor: TRVZBSchedulerCardEditor,
+  editor: HiveSchedulerCardEditor,
   selector: string
 ): T | null {
   return editor.shadowRoot?.querySelector<T>(selector) || null;
@@ -65,7 +65,7 @@ function querySelector<T extends Element>(
  * Helper function to query all elements in shadow DOM
  */
 function querySelectorAll<T extends Element>(
-  editor: TRVZBSchedulerCardEditor,
+  editor: HiveSchedulerCardEditor,
   selector: string
 ): T[] {
   return Array.from(editor.shadowRoot?.querySelectorAll<T>(selector) || []);
@@ -166,22 +166,22 @@ describe('Editor Component', () => {
 
       if (entitySelect && entitySelect.options.length > 1) {
         // Use select if available
-        entitySelect.value = 'climate.bedroom_trvzb';
+        entitySelect.value = 'climate.bedroom_hive';
         entitySelect.dispatchEvent(new Event('change', { bubbles: true }));
         await editor.updateComplete;
 
         expect(configChangedSpy).toHaveBeenCalled();
         const event = configChangedSpy.mock.calls[0][0] as CustomEvent;
-        expect(event.detail.config.entity).toBe('climate.bedroom_trvzb');
+        expect(event.detail.config.entity).toBe('climate.bedroom_hive');
       } else if (entityInput) {
         // Use input if select not available
-        entityInput.value = 'climate.bedroom_trvzb';
+        entityInput.value = 'climate.bedroom_hive';
         entityInput.dispatchEvent(new Event('input', { bubbles: true }));
         await editor.updateComplete;
 
         expect(configChangedSpy).toHaveBeenCalled();
         const event = configChangedSpy.mock.calls[0][0] as CustomEvent;
-        expect(event.detail.config.entity).toBe('climate.bedroom_trvzb');
+        expect(event.detail.config.entity).toBe('climate.bedroom_hive');
       }
     });
 
@@ -261,7 +261,7 @@ describe('Editor Component', () => {
         const event = configChangedSpy.mock.calls[0][0] as CustomEvent;
         const config = event.detail.config;
 
-        expect(config.type).toBe('custom:trvzb-scheduler-card');
+        expect(config.type).toBe('custom:hive-scheduler-card');
         expect(config.entity).toBeDefined();
         expect(config.name).toBeDefined();
         expect(config.view_mode).toBeDefined();
@@ -328,7 +328,7 @@ describe('Editor Component', () => {
     it('should filter to climate domain only', async () => {
       const hass = createMockHass({
         states: {
-          'climate.living_room_trvzb': createMockTRVZBEntity('living_room_trvzb'),
+          'climate.living_room_hive': createMockHiveEntity('living_room_hive'),
           'light.bedroom_light': {
             entity_id: 'light.bedroom_light',
             state: 'on',
@@ -367,7 +367,7 @@ describe('Editor Component', () => {
       if (entitySelect && entitySelect.options.length > 1) {
         // Select the second option (first is usually empty placeholder)
         const targetOption = Array.from(entitySelect.options).find(
-          opt => opt.value.startsWith('climate.') && opt.value !== editor.hass.states['climate.living_room_trvzb']?.entity_id
+          opt => opt.value.startsWith('climate.') && opt.value !== editor.hass.states['climate.living_room_hive']?.entity_id
         );
 
         if (targetOption) {
@@ -478,7 +478,7 @@ describe('Editor Component', () => {
 
       const descriptions = querySelectorAll<HTMLElement>(editor, '.editor-description');
       const entityDescription = descriptions.find(desc =>
-        desc.textContent?.toLowerCase().includes('trvzb') ||
+        desc.textContent?.toLowerCase().includes('hive') ||
         desc.textContent?.toLowerCase().includes('entity')
       );
 

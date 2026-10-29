@@ -1,223 +1,51 @@
-/**
- * Home Assistant service integration layer
- * Handles reading/writing TRVZB schedules via Home Assistant and MQTT
- */
+/** Home Assistant entity discovery and receiver schedule access. */
+import { HomeAssistant, WeeklySchedule, DAYS_OF_WEEK, HiveSchedulerCardConfig, ScheduleEntities, EntityRegistryEntry } from '../models/types';
+import { parseDaySchedule } from '../models/schedule';
+export { SaveCoordinator } from './save-coordinator';
 
-import { HomeAssistant, WeeklySchedule, MQTTWeeklySchedule, DAYS_OF_WEEK, DayOfWeek, SaveScheduleResult } from '../models/types';
-import { parseWeeklySchedule, createEmptyWeeklySchedule, computeScheduleDiff, buildPartialPayload } from '../models/schedule';
-import { sanitizeMqttTopicSegment } from './mqtt-sanitizer';
-
-/**
- * Invalid sensor states that indicate no valid data is available
- * Home Assistant sensors can report various states when data is not ready
- * All values are lowercase for case-insensitive comparison
- */
-const INVALID_SENSOR_STATES = new Set([
-  'unavailable',
-  'unknown',
-  'none',
-  'null',
-  '',
-  'n/a'
-]);
-
-/**
- * Check if a sensor state indicates invalid/unavailable data
- *
- * @param state - The sensor state string to check
- * @returns True if the state indicates invalid data
- */
 export function isInvalidSensorState(state: string | null | undefined): boolean {
-  if (state == null) {
-    return true;
-  }
-  return INVALID_SENSOR_STATES.has(state.toLowerCase());
+  return state == null || ['', 'unavailable', 'unknown', 'none', 'null', 'n/a'].includes(state.trim().toLowerCase());
 }
 
-/**
- * Validate that a schedule object has all required days with transitions arrays
- * Used for early validation before computing diff or saving
- *
- * @param schedule - The schedule to validate
- * @returns True if schedule has all 7 days with transitions arrays
- */
-function validateScheduleStructure(schedule: WeeklySchedule): boolean {
-  if (!schedule || typeof schedule !== 'object') {
-    return false;
+export async function resolveScheduleEntities(hass: HomeAssistant, config: HiveSchedulerCardConfig): Promise<ScheduleEntities> {
+  const resolved = { ...config.schedule_entities } as ScheduleEntities;
+  const missing = DAYS_OF_WEEK.filter(day => !resolved[day]);
+  if (missing.length) {
+    if (!hass.callWS) throw new Error('Entity discovery unavailable. Configure schedule_entities for all seven days.');
+    const entries = await hass.callWS<EntityRegistryEntry[]>({ type: 'config/entity_registry/list' });
+    const device = entries.find(entry => entry.entity_id === config.entity)?.device_id;
+    if (!device) throw new Error('Climate device association not found. Configure schedule_entities explicitly.');
+    for (const day of missing) {
+      const matches = entries.filter(entry => entry.device_id === device && entry.platform === 'mqtt'
+        && entry.entity_id.startsWith('text.') && !entry.disabled_by
+        && new RegExp(`(?:^|_)schedule_${day}(?:_[0-9]+)?(?:_zigbee2mqtt)?$`).test(entry.unique_id));
+      if (matches.length !== 1) throw new Error(`${day}: schedule entity missing or ambiguous. Set schedule_entities.${day}.`);
+      resolved[day] = matches[0].entity_id;
+    }
   }
-
-  // Check that all 7 days are present with transitions arrays
   for (const day of DAYS_OF_WEEK) {
-    const daySchedule = schedule[day];
-    if (!daySchedule || !Array.isArray(daySchedule.transitions)) {
-      return false;
-    }
+    if (!/^text\.[a-z0-9_]+$/.test(resolved[day])) throw new Error(`${day}: expected a text entity ID.`);
   }
-
-  return true;
+  if (new Set(Object.values(resolved)).size !== 7) throw new Error('Each day must use a different schedule entity.');
+  return resolved;
 }
 
-/**
- * Type guard to verify a partial schedule has all 7 days populated
- * Used to safely narrow Partial<MQTTWeeklySchedule> to MQTTWeeklySchedule
- */
-function isCompleteMQTTSchedule(schedule: Partial<MQTTWeeklySchedule>): schedule is MQTTWeeklySchedule {
-  return DAYS_OF_WEEK.every(day => typeof schedule[day] === 'string');
-}
-
-/**
- * Entity information for display
- */
-export interface EntityInfo {
-  name: string;
-  available: boolean;
-  currentTemp?: number;
-  targetTemp?: number;
-}
-
-/**
- * Derive a day-specific schedule text entity ID from a climate entity ID
- * New convention: climate.device_name -> text.device_name_weekly_schedule_<day>
- *
- * @param climateEntityId - Climate entity ID (e.g., "climate.living_room_trvzb")
- * @param day - Day of week (e.g., "monday")
- * @returns Text entity ID (e.g., "text.living_room_trvzb_weekly_schedule_monday")
- */
-export function deriveDaySensorEntityId(climateEntityId: string, day: DayOfWeek): string {
-  const deviceName = extractFriendlyName(climateEntityId);
-  return `text.${deviceName}_weekly_schedule_${day}`;
-}
-
-/**
- * Get the weekly schedule from 7 separate day text entities
- * Reads from the state of each text.{device}_weekly_schedule_{day}
- *
- * @param hass - Home Assistant instance
- * @param climateEntityId - Climate entity ID (e.g., "climate.living_room_trvzb")
- * @returns Weekly schedule or null if not found
- */
-export function getScheduleFromSensor(hass: HomeAssistant, climateEntityId: string): WeeklySchedule | null {
-  try {
-    const mqttSchedule: Partial<MQTTWeeklySchedule> = {};
-    const missingDays: string[] = [];
-
-    // Read each day's schedule from its own sensor
-    for (const day of DAYS_OF_WEEK) {
-      const daySensorId = deriveDaySensorEntityId(climateEntityId, day);
-      const sensorEntity = hass.states[daySensorId];
-
-      if (!sensorEntity) {
-        console.warn(`Day sensor not found: ${daySensorId}`);
-        missingDays.push(day);
-        continue;
-      }
-
-      // The schedule string is in the sensor's state
-      const dayScheduleString = sensorEntity.state;
-
-      if (isInvalidSensorState(dayScheduleString)) {
-        console.warn(`No schedule state found on sensor: ${daySensorId}`);
-        missingDays.push(day);
-        continue;
-      }
-
-      mqttSchedule[day] = dayScheduleString;
-    }
-
-    // Verify all days are present using type guard
-    if (!isCompleteMQTTSchedule(mqttSchedule)) {
-      console.error(`Missing schedule data for ${climateEntityId}: days ${missingDays.join(', ')}`);
-      return null;
-    }
-
-    // Parse the MQTT format to our internal WeeklySchedule format
-    // Type is now safely narrowed to MQTTWeeklySchedule by the type guard
-    return parseWeeklySchedule(mqttSchedule);
-  } catch (error) {
-    console.error(`Error getting schedule from sensors for ${climateEntityId}:`, error);
-    return null;
+export function getScheduleFromSensor(hass: HomeAssistant, entities: ScheduleEntities): WeeklySchedule {
+  const schedule = {} as WeeklySchedule;
+  const errors: string[] = [];
+  for (const day of DAYS_OF_WEEK) {
+    try {
+      const state = hass.states[entities[day]]?.state;
+      if (isInvalidSensorState(state)) throw new Error(`Entity ${entities[day]} is missing or unavailable`);
+      schedule[day] = parseDaySchedule(state);
+    } catch (error) { errors.push(`${day}: ${error instanceof Error ? error.message : error}`); }
   }
+  if (errors.length) throw new Error(errors.join('; '));
+  return schedule;
 }
 
-/**
- * Save only modified days of a weekly schedule to the device via MQTT
- * Publishes a single JSON message with only the changed days
- *
- * @param hass - Home Assistant instance
- * @param entityId - Climate entity ID
- * @param originalSchedule - The schedule as it was before modifications
- * @param modifiedSchedule - The schedule after user modifications
- * @returns Result indicating which days were updated
- */
-export async function saveSchedule(
-  hass: HomeAssistant,
-  entityId: string,
-  originalSchedule: WeeklySchedule,
-  modifiedSchedule: WeeklySchedule
-): Promise<SaveScheduleResult> {
-  try {
-    // Validate input schedules before computing diff
-    if (!validateScheduleStructure(originalSchedule)) {
-      return {
-        status: 'error',
-        error: 'Invalid original schedule: missing days or transitions array'
-      };
-    }
+export interface EntityInfo { name: string; available: boolean; currentTemp?: number; targetTemp?: number; }
 
-    if (!validateScheduleStructure(modifiedSchedule)) {
-      return {
-        status: 'error',
-        error: 'Invalid modified schedule: missing days or transitions array'
-      };
-    }
-
-    // Compute which days have changed
-    const diff = computeScheduleDiff(originalSchedule, modifiedSchedule);
-
-    // No changes detected - skip MQTT publish
-    if (!diff.hasChanges) {
-      return { status: 'skipped' };
-    }
-
-    // Build the partial payload
-    const payload = buildPartialPayload(diff);
-
-    // Extract device friendly name from entity_id
-    const friendlyName = extractFriendlyName(entityId);
-
-    // Validate entity ID before using in MQTT topic (defense in depth)
-    if (!friendlyName || friendlyName.trim().length === 0) {
-      throw new Error('Invalid entity ID: cannot extract device name');
-    }
-
-    // Publish single message to base set topic
-    const topic = `zigbee2mqtt/${friendlyName}/set`;
-
-    await hass.callService('mqtt', 'publish', {
-      topic: topic,
-      payload: JSON.stringify(payload)
-    });
-
-    return {
-      status: 'success',
-      daysUpdated: diff.changedDays
-    };
-  } catch (error) {
-    console.error(`Error saving schedule for ${entityId}:`, error);
-    return {
-      status: 'error',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    };
-  }
-}
-
-/**
- * Get basic entity information for display
- *
- * @param hass - Home Assistant instance
- * @param entityId - Climate entity ID
- * @returns Entity info or null if not found
- */
 export function getEntityInfo(hass: HomeAssistant, entityId: string): EntityInfo | null {
   const entity = hass.states[entityId];
   if (!entity) {
@@ -245,66 +73,10 @@ export function getEntityInfo(hass: HomeAssistant, entityId: string): EntityInfo
   };
 }
 
-/**
- * Extract device friendly name from climate entity_id
- * Handles "climate.device_name" format
- *
- * SECURITY: Sanitizes output to remove MQTT special characters
- * that could cause topic injection (wildcards +, #, separators /)
- *
- * @param entityId - Full entity ID (e.g., "climate.living_room_trvzb")
- * @returns Sanitized device friendly name (e.g., "living_room_trvzb")
- */
-export function extractFriendlyName(entityId: string): string {
-  // Remove the domain prefix (e.g., "climate.")
-  const parts = entityId.split('.');
 
-  // Extract the device name portion
-  const rawDeviceName = parts.length < 2
-    ? entityId
-    : parts.slice(1).join('.');
-
-  // Sanitize for MQTT safety (defense in depth)
-  const result = sanitizeMqttTopicSegment(rawDeviceName, 'unknown_device');
-
-  // Log warning if sanitization modified the input (helps debug misconfiguration)
-  if (result.wasModified) {
-    console.warn(
-      `MQTT safety: Sanitized device name from "${result.originalValue}" to "${result.value}"`
-    );
-  }
-
-  return result.value;
-}
-
-/**
- * Check if a climate entity exists in Home Assistant
- *
- * @param hass - Home Assistant instance
- * @param entityId - Climate entity ID
- * @returns True if entity exists
- */
 export function entityExists(hass: HomeAssistant, entityId: string): boolean {
   return entityId in hass.states;
 }
-
-/**
- * Get all climate entities from Home Assistant
- * Useful for entity picker in configuration
- *
- * @param hass - Home Assistant instance
- * @returns Array of climate entity IDs
- */
 export function getClimateEntities(hass: HomeAssistant): string[] {
-  return Object.keys(hass.states).filter(entityId => entityId.startsWith('climate.'));
-}
-
-/**
- * Create a default weekly schedule
- * Useful when initializing new configurations or when entity has no schedule
- *
- * @returns Empty weekly schedule with default transitions
- */
-export function getDefaultSchedule(): WeeklySchedule {
-  return createEmptyWeeklySchedule();
+  return Object.keys(hass.states).filter(id => id.startsWith('climate.'));
 }

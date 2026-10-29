@@ -10,7 +10,7 @@ export const DAYS_OF_WEEK: readonly DayOfWeek[] = [
 export interface Transition {
   id?: string;         // unique identifier for UI tracking (not persisted to MQTT)
   time: string;        // "HH:mm" format (24h)
-  temperature: number; // 4-35°C, 0.5°C steps
+  temperature: number; // 1°C off, or 5–32°C in 0.5°C steps
 }
 
 // Schedule for a single day
@@ -30,24 +30,31 @@ export interface WeeklySchedule {
 }
 
 // Card configuration
-export interface TRVZBSchedulerCardConfig {
+export interface HiveSchedulerCardConfig {
   type: string;
   entity: string;           // climate entity ID
   name?: string;            // optional display name
   view_mode?: 'week' | 'graph'; // default view mode
-  schedule_sensor?: string; // optional override for schedule sensor entity ID
+  mqtt_device: string; // exact Zigbee2MQTT friendly name
+  schedule_entities?: Partial<Record<DayOfWeek, string>>;
 }
 
 // Home Assistant types (simplified)
 export interface HomeAssistant {
   states: Record<string, HassEntity>;
   callService: (domain: string, service: string, data: Record<string, unknown>) => Promise<void>;
+  user?: { is_admin: boolean };
+  callWS?: <T>(message: Record<string, unknown>) => Promise<T>;
+  connection?: {
+    subscribeMessage: <T>(callback: (message: T) => void, message: Record<string, unknown>) => Promise<() => void>;
+  };
 }
 
 export interface HassEntity {
   entity_id: string;
   state: string;
   attributes: Record<string, unknown>;
+  last_updated?: string;
 }
 
 // Validation result
@@ -71,7 +78,7 @@ export interface MQTTWeeklySchedule {
  * Partial MQTT payload for bulk updates
  * Contains only the days that need to be updated
  */
-export type MQTTPartialPayload = Partial<Record<`weekly_schedule_${DayOfWeek}`, string>>;
+export type MQTTPartialPayload = Partial<Record<`schedule_${DayOfWeek}`, string>>;
 
 /**
  * Result of computing schedule differences
@@ -92,4 +99,19 @@ export interface ScheduleDiff {
 export type SaveScheduleResult =
   | { status: 'success'; daysUpdated: readonly DayOfWeek[] }
   | { status: 'skipped' }
-  | { status: 'error'; error: string };
+  | { status: 'error'; error: string; daysUpdated: readonly DayOfWeek[] };
+
+export type ScheduleEntities = Record<DayOfWeek, string>;
+export interface EntityRegistryEntry {
+  entity_id: string;
+  device_id: string | null;
+  platform: string;
+  unique_id: string;
+  disabled_by?: string | null;
+}
+
+export interface MqttMessage {
+  topic: string;
+  payload: string;
+  retain: boolean;
+}
