@@ -46,11 +46,11 @@ describe('Hive UI regressions', () => {
     const { card, root } = await mount('graph'); const graph = root.querySelector('hive-schedule-graph-view') as any; await tick(graph);
     expect(graph.shadowRoot.querySelector('.inferred-line')).toBeTruthy();
     expect(graph.shadowRoot.querySelectorAll('.point-group')).toHaveLength(2);
-    expect(graph.shadowRoot.querySelector('.inferred-line').textContent).toContain('sunday');
+    expect(graph.shadowRoot.querySelector('.inferred-line').textContent).toContain('Sunday');
     const sun = [...graph.shadowRoot.querySelectorAll('button')].find((button: any) => button.textContent.trim() === 'Sun') as HTMLButtonElement;
     sun.click(); await tick(graph);
-    expect(graph.shadowRoot.querySelector('.inferred-line').textContent).toContain('saturday');
-    expect(graph.shadowRoot.querySelector('.carry-over-note').textContent).toContain('carried over from Saturday');
+    expect(graph.shadowRoot.querySelector('.inferred-line').textContent).toContain('Saturday');
+    expect(graph.shadowRoot.querySelector('.inferred-line title').textContent).toContain('carried over from Saturday');
     expect(graph.schedule.sunday.transitions[0].time).toBe('06:07');
     expect(card.shadowRoot!.querySelector('.save-button')!.hasAttribute('disabled')).toBe(true);
   });
@@ -62,7 +62,7 @@ describe('Hive UI regressions', () => {
     expect(graph.schedule.monday.transitions).toHaveLength(1); expect(card).toBeTruthy();
   });
 
-  it.each([1, 12, 32])('labels the start of Monday with Sunday’s final %s°C setting', async temperature => {
+  it.each([1, 12, 32])('provides Sunday’s final %s°C setting on hover at the start of Monday', async temperature => {
     const { root } = await mount('graph');
     const graph = root.querySelector('hive-schedule-graph-view') as any;
     graph.schedule = {
@@ -71,7 +71,9 @@ describe('Hive UI regressions', () => {
     };
     const before = serializeDaySchedule(graph.schedule.monday);
     await tick(graph);
-    const note = graph.shadowRoot.querySelector('.carry-over-note').textContent;
+    const note = graph.shadowRoot.querySelector('.inferred-line title').textContent;
+    expect(graph.shadowRoot.querySelector('.carry-over-note')).toBeNull();
+    expect(graph.shadowRoot.querySelector('.inferred-hover-target title').textContent).toBe(note);
     expect(note).toContain('00:00–06:07');
     expect(note).toContain(temperature === 1 ? 'Heating off (1°C)' : `${temperature}°C`);
     expect(note).toContain('carried over from Sunday');
@@ -106,7 +108,7 @@ describe('Hive UI regressions', () => {
     const { card, scenario, root } = await mount('graph');
     const graph = root.querySelector('hive-schedule-graph-view') as any;
     await tick(graph);
-    expect(graph.shadowRoot.querySelector('.carry-over-note').textContent).toContain('Heating off (1°C)');
+    expect(graph.shadowRoot.querySelector('.inferred-line title').textContent).toContain('Heating off (1°C)');
     event(graph, 'schedule-changed', { day: 'monday', schedule: { transitions: [{ time: '06:07', temperature: 21 }, { time: '19:31', temperature: 1 }] } });
     await tick(card);
     await (card as any)._saveSchedule();

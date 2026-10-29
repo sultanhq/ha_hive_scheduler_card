@@ -117,26 +117,6 @@ export class ScheduleGraphView extends LitElement {
         stroke-linejoin: round;
       }
 
-      .carry-over-note {
-        display: flex;
-        gap: 8px;
-        margin-bottom: 12px;
-        color: var(--secondary-text-color, #666666);
-        font-size: 13px;
-        line-height: 1.5;
-      }
-
-      .carry-over-note strong {
-        color: var(--primary-text-color, #333333);
-      }
-
-      .carry-over-key {
-        width: 24px;
-        flex-shrink: 0;
-        margin-top: 9px;
-        border-top: 2px dashed var(--secondary-text-color, #666666);
-      }
-
       .point-group {
         cursor: grab;
         pointer-events: auto;
@@ -751,16 +731,27 @@ export class ScheduleGraphView extends LitElement {
 
     const pathParts: string[] = [];
     const carryOver = this.getCarryOver();
+    const inferredPath = carryOver
+      ? `M ${this.hourToX(0, width)},${this.tempToY(carryOver.temperature, height)} L ${this.hourToX(this.timeToHours(carryOver.until), width)},${this.tempToY(carryOver.temperature, height)} L ${this.hourToX(this.timeToHours(carryOver.until), width)},${this.tempToY(transitions[0].temperature, height)}`
+      : '';
+    const inferredDescription = carryOver
+      ? `00:00–${carryOver.until}: ${carryOver.temperature === 1 ? 'Heating off (1°C)' : `${carryOver.temperature}°C`} · carried over from ${carryOver.day.charAt(0).toUpperCase() + carryOver.day.slice(1)}. Display only; not a stored transition.`
+      : '';
     const inferred = carryOver
       ? svg`
           <path class="inferred-line" stroke="var(--secondary-text-color, #666666)"
-            stroke-width="2.5" stroke-dasharray="6 4" vector-effect="non-scaling-stroke" fill="none"
-            d=${`M ${this.hourToX(0, width)},${this.tempToY(carryOver.temperature, height)} L ${this.hourToX(this.timeToHours(carryOver.until), width)},${this.tempToY(carryOver.temperature, height)} L ${this.hourToX(this.timeToHours(carryOver.until), width)},${this.tempToY(transitions[0].temperature, height)}`}>
-            <title>Inferred from ${carryOver.day}; not a stored transition</title>
+            stroke-width="1.25" stroke-dasharray="4 4" vector-effect="non-scaling-stroke" fill="none" d=${inferredPath}>
+            <title>${inferredDescription}</title>
+          </path>
+          <path class="inferred-hover-target" stroke="transparent" stroke-width="14"
+            vector-effect="non-scaling-stroke" pointer-events="stroke" fill="none" d=${inferredPath}>
+            <title>${inferredDescription}</title>
           </path>
           <circle class="inferred-start" cx=${this.hourToX(0, width)} cy=${this.tempToY(carryOver.temperature, height)}
             r="5" fill="var(--card-background-color, #ffffff)" stroke="var(--secondary-text-color, #666666)"
-            stroke-width="2" vector-effect="non-scaling-stroke" aria-hidden="true" />
+            stroke-width="2" vector-effect="non-scaling-stroke">
+            <title>${inferredDescription}</title>
+          </circle>
         `
       : null;
 
@@ -854,17 +845,9 @@ export class ScheduleGraphView extends LitElement {
     }
 
     const transitions = daySchedule.transitions;
-    const carryOver = this.getCarryOver();
 
     return html`
       <div class="chart-wrapper">
-        ${carryOver ? html`
-          <div class="carry-over-note" role="note">
-            <span class="carry-over-key" aria-hidden="true"></span>
-            <span><strong>00:00–${carryOver.until}: ${carryOver.temperature === 1 ? 'Heating off (1°C)' : `${carryOver.temperature}°C`}</strong>
-              · carried over from ${carryOver.day.charAt(0).toUpperCase() + carryOver.day.slice(1)}. Display only.</span>
-          </div>
-        ` : ''}
         <svg
           class="chart-svg"
           viewBox="0 0 ${this.VIEWBOX_WIDTH} ${this.VIEWBOX_HEIGHT}"
