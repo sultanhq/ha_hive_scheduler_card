@@ -8,7 +8,7 @@
 import type { HomeAssistant } from '../../src/models/types';
 import {
   createMockHass,
-  createMockTRVZBEntity,
+  createMockHiveEntity,
   createMockSchedule,
   createTestScenario,
   MockServiceCallRecorder,
@@ -22,8 +22,8 @@ import {
 // ============================================================================
 
 export function example1_basicSetup() {
-  // Create a mock TRVZB entity
-  const entity = createMockTRVZBEntity('living_room');
+  // Create a mock Hive SLR1c entity
+  const entity = createMockHiveEntity('living_room');
 
   // Create mock Home Assistant with the entity
   const hass = createMockHass({
@@ -48,7 +48,7 @@ export async function example2_serviceCallRecording() {
 
   // Simulate saving a schedule via MQTT
   await hass.callService('mqtt', 'publish', {
-    topic: 'zigbee2mqtt/living_room_trvzb/set',
+    topic: 'zigbee2mqtt/living_room_hive/set',
     payload: JSON.stringify({ weekly_schedule: SAMPLE_WEEKLY_SCHEDULE }),
   });
 
@@ -64,7 +64,7 @@ export async function example2_serviceCallRecording() {
 
 export function example3_testScenario() {
   // Create complete test scenario (includes hass, recorder, entity)
-  const scenario = createTestScenario('bedroom_trvzb');
+  const scenario = createTestScenario('bedroom_hive');
 
   // Everything is connected and ready to use
   console.log('Entity ID:', scenario.entityId);
@@ -79,17 +79,17 @@ export function example3_testScenario() {
 export function example4_customSchedules() {
   // Test with minimal schedule (edge case)
   const minimalSchedule = createMockSchedule('minimal');
-  const entity1 = createMockTRVZBEntity('minimal_test', minimalSchedule);
+  const entity1 = createMockHiveEntity('minimal_test', minimalSchedule);
   console.log('Minimal Monday:', minimalSchedule.monday); // "00:00/20"
 
   // Test with maximum transitions (6 per day)
   const maximalSchedule = createMockSchedule('maximal');
-  const entity2 = createMockTRVZBEntity('maximal_test', maximalSchedule);
+  const entity2 = createMockHiveEntity('maximal_test', maximalSchedule);
   console.log('Maximal transitions:', maximalSchedule.monday.split(' ').length); // 6
 
   // Test with weekday-optimized schedule
   const weekdaySchedule = createMockSchedule('weekday');
-  const entity3 = createMockTRVZBEntity('weekday_test', weekdaySchedule);
+  const entity3 = createMockHiveEntity('weekday_test', weekdaySchedule);
   console.log('Weekday Monday:', weekdaySchedule.monday);
 }
 
@@ -155,9 +155,9 @@ export async function example6_componentIntegration() {
 
 export function example7_multipleEntities() {
   // Create multiple entities
-  const livingRoom = createMockTRVZBEntity('living_room');
-  const bedroom = createMockTRVZBEntity('bedroom');
-  const kitchen = createMockTRVZBEntity('kitchen');
+  const livingRoom = createMockHiveEntity('living_room');
+  const bedroom = createMockHiveEntity('bedroom');
+  const kitchen = createMockHiveEntity('kitchen');
 
   // Create hass with all entities
   const hass = createMockHass({

@@ -1,15 +1,15 @@
 /**
- * Integration tests for TRVZB Scheduler Card
+ * Integration tests for Hive Scheduler Card
  * Tests the main card component with realistic Home Assistant scenarios
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { TRVZBSchedulerCard } from '../../src/card';
+import { HiveSchedulerCard } from '../../src/card';
 import { HomeAssistant, DayOfWeek, WeeklySchedule } from '../../src/models/types';
 import {
   createTestScenario,
   createMockHass,
-  createMockTRVZBEntity,
+  createMockHiveEntity,
   createMockScheduleSensor,
   createMockDaySensors,
   createMockClimateEntityWithoutSchedule,
@@ -22,8 +22,8 @@ import {
 /**
  * Helper: Create and mount card element to DOM
  */
-function createCard(): TRVZBSchedulerCard {
-  const card = document.createElement('trvzb-scheduler-card') as TRVZBSchedulerCard;
+function createCard(): HiveSchedulerCard {
+  const card = document.createElement('hive-scheduler-card') as HiveSchedulerCard;
   document.body.appendChild(card);
   return card;
 }
@@ -31,7 +31,7 @@ function createCard(): TRVZBSchedulerCard {
 /**
  * Helper: Wait for LitElement to complete updates
  */
-async function waitForUpdate(card: TRVZBSchedulerCard): Promise<void> {
+async function waitForUpdate(card: HiveSchedulerCard): Promise<void> {
   await card.updateComplete;
   // Additional tick for child components
   await new Promise(resolve => setTimeout(resolve, 0));
@@ -40,14 +40,14 @@ async function waitForUpdate(card: TRVZBSchedulerCard): Promise<void> {
 /**
  * Helper: Query shadow DOM elements
  */
-function queryShadow<T extends Element>(card: TRVZBSchedulerCard, selector: string): T | null {
+function queryShadow<T extends Element>(card: HiveSchedulerCard, selector: string): T | null {
   return card.shadowRoot?.querySelector<T>(selector) || null;
 }
 
 /**
  * Helper: Query all shadow DOM elements
  */
-function queryShadowAll<T extends Element>(card: TRVZBSchedulerCard, selector: string): T[] {
+function queryShadowAll<T extends Element>(card: HiveSchedulerCard, selector: string): T[] {
   return Array.from(card.shadowRoot?.querySelectorAll<T>(selector) || []);
 }
 
@@ -67,8 +67,8 @@ function dispatchCustomEvent<T = any>(
   return target.dispatchEvent(event);
 }
 
-describe('TRVZBSchedulerCard - Integration Tests', () => {
-  let card: TRVZBSchedulerCard;
+describe('HiveSchedulerCard - Integration Tests', () => {
+  let card: HiveSchedulerCard;
   let scenario: TestScenario;
 
   beforeEach(() => {
@@ -90,7 +90,7 @@ describe('TRVZBSchedulerCard - Integration Tests', () => {
     it('should render without error when properly configured', async () => {
       // Set configuration
       card.setConfig({
-        type: 'custom:trvzb-scheduler-card',
+        type: 'custom:hive-scheduler-card', mqtt_device: 'Hive Reciever',
         entity: scenario.entityId
       });
 
@@ -107,16 +107,16 @@ describe('TRVZBSchedulerCard - Integration Tests', () => {
     it('should throw error if entity not configured', () => {
       expect(() => {
         card.setConfig({
-          type: 'custom:trvzb-scheduler-card',
+          type: 'custom:hive-scheduler-card', mqtt_device: 'Hive Reciever',
           entity: ''
         });
-      }).toThrow('You must specify an entity');
+      }).toThrow('You must specify a climate entity');
     });
 
     it('should show error if entity not found in hass', async () => {
       // Configure with non-existent entity
       card.setConfig({
-        type: 'custom:trvzb-scheduler-card',
+        type: 'custom:hive-scheduler-card', mqtt_device: 'Hive Reciever',
         entity: 'climate.non_existent'
       });
 
@@ -132,7 +132,7 @@ describe('TRVZBSchedulerCard - Integration Tests', () => {
 
     it('should load schedule from entity attributes', async () => {
       card.setConfig({
-        type: 'custom:trvzb-scheduler-card',
+        type: 'custom:hive-scheduler-card', mqtt_device: 'Hive Reciever',
         entity: scenario.entityId
       });
 
@@ -147,7 +147,7 @@ describe('TRVZBSchedulerCard - Integration Tests', () => {
       expect(scheduleState.monday.transitions).toBeInstanceOf(Array);
     });
 
-    it('should show error and use default schedule when day sensors have invalid state', async () => {
+    it('should show an error without inventing a schedule when entities are unavailable', async () => {
       // Create climate entity and day sensors with invalid states
       const entityWithoutSchedule = createMockClimateEntityWithoutSchedule();
       const entityName = entityWithoutSchedule.entity_id.split('.')[1];
@@ -157,7 +157,7 @@ describe('TRVZBSchedulerCard - Integration Tests', () => {
       const daySensorStates: Record<string, any> = {};
 
       for (const day of days) {
-        const daySensorId = `text.${entityName}_weekly_schedule_${day}`;
+        const daySensorId = `text.${entityName}_schedule_${day}`;
         daySensorStates[daySensorId] = {
           entity_id: daySensorId,
           state: 'unavailable',
@@ -175,7 +175,7 @@ describe('TRVZBSchedulerCard - Integration Tests', () => {
       });
 
       card.setConfig({
-        type: 'custom:trvzb-scheduler-card',
+        type: 'custom:hive-scheduler-card', mqtt_device: 'Hive Reciever',
         entity: entityWithoutSchedule.entity_id
       });
 
@@ -183,29 +183,16 @@ describe('TRVZBSchedulerCard - Integration Tests', () => {
 
       await waitForUpdate(card);
 
-      // Should use default schedule and show error when sensors have invalid state
-      const scheduleState = (card as any)._schedule;
-      const errorState = (card as any)._error;
-      const hasChanges = (card as any)._hasUnsavedChanges;
-
-      // Sensors exist but have invalid state -> use default schedule with error
-      expect(scheduleState).not.toBeNull();
-      expect(scheduleState.monday).toBeTruthy();
-      expect(scheduleState.monday.transitions).toBeInstanceOf(Array);
-      expect(hasChanges).toBe(true);
-      expect(errorState).toBe('No valid schedule found on sensors. Using default schedule.');
-
-      // Error message should be displayed in the UI
-      const errorMessage = queryShadow(card, '.message-error');
-      expect(errorMessage).toBeTruthy();
-      expect(errorMessage?.textContent).toContain('No valid schedule found');
+      expect((card as any)._schedule).toBeNull();
+      expect((card as any)._hasUnsavedChanges).toBe(false);
+      expect(queryShadow(card, '.message-error')?.textContent).toContain('unavailable');
     });
 
     it('should use custom name from config', async () => {
       const customName = 'Custom Thermostat Name';
 
       card.setConfig({
-        type: 'custom:trvzb-scheduler-card',
+        type: 'custom:hive-scheduler-card', mqtt_device: 'Hive Reciever',
         entity: scenario.entityId,
         name: customName
       });
@@ -220,7 +207,7 @@ describe('TRVZBSchedulerCard - Integration Tests', () => {
 
     it('should use entity friendly name when config name not provided', async () => {
       card.setConfig({
-        type: 'custom:trvzb-scheduler-card',
+        type: 'custom:hive-scheduler-card', mqtt_device: 'Hive Reciever',
         entity: scenario.entityId
       });
 
@@ -238,7 +225,7 @@ describe('TRVZBSchedulerCard - Integration Tests', () => {
   describe('View Mode', () => {
     beforeEach(async () => {
       card.setConfig({
-        type: 'custom:trvzb-scheduler-card',
+        type: 'custom:hive-scheduler-card', mqtt_device: 'Hive Reciever',
         entity: scenario.entityId
       });
       card.hass = scenario.hass;
@@ -251,10 +238,10 @@ describe('TRVZBSchedulerCard - Integration Tests', () => {
     });
 
     it('should render week view when viewMode is week', async () => {
-      const weekView = queryShadow(card, 'schedule-week-view');
+      const weekView = queryShadow(card, 'hive-schedule-week-view');
       expect(weekView).toBeTruthy();
 
-      const graphView = queryShadow(card, 'schedule-graph-view');
+      const graphView = queryShadow(card, 'hive-schedule-graph-view');
       expect(graphView).toBeFalsy();
     });
 
@@ -276,10 +263,10 @@ describe('TRVZBSchedulerCard - Integration Tests', () => {
       toggleButton!.click();
       await waitForUpdate(card);
 
-      const graphView = queryShadow(card, 'schedule-graph-view');
+      const graphView = queryShadow(card, 'hive-schedule-graph-view');
       expect(graphView).toBeTruthy();
 
-      const weekView = queryShadow(card, 'schedule-week-view');
+      const weekView = queryShadow(card, 'hive-schedule-week-view');
       expect(weekView).toBeFalsy();
     });
 
@@ -287,7 +274,7 @@ describe('TRVZBSchedulerCard - Integration Tests', () => {
       // Create new card with graph view_mode
       const newCard = createCard();
       newCard.setConfig({
-        type: 'custom:trvzb-scheduler-card',
+        type: 'custom:hive-scheduler-card', mqtt_device: 'Hive Reciever',
         entity: scenario.entityId,
         view_mode: 'graph'
       });
@@ -297,7 +284,7 @@ describe('TRVZBSchedulerCard - Integration Tests', () => {
       const viewMode = (newCard as any)._viewMode;
       expect(viewMode).toBe('graph');
 
-      const graphView = queryShadow(newCard, 'schedule-graph-view');
+      const graphView = queryShadow(newCard, 'hive-schedule-graph-view');
       expect(graphView).toBeTruthy();
 
       // Cleanup
@@ -322,7 +309,7 @@ describe('TRVZBSchedulerCard - Integration Tests', () => {
   describe('Schedule Display', () => {
     beforeEach(async () => {
       card.setConfig({
-        type: 'custom:trvzb-scheduler-card',
+        type: 'custom:hive-scheduler-card', mqtt_device: 'Hive Reciever',
         entity: scenario.entityId
       });
       card.hass = scenario.hass;
@@ -330,7 +317,7 @@ describe('TRVZBSchedulerCard - Integration Tests', () => {
     });
 
     it('should pass schedule data to week view component', async () => {
-      const weekView = queryShadow(card, 'schedule-week-view');
+      const weekView = queryShadow(card, 'hive-schedule-week-view');
       expect(weekView).toBeTruthy();
 
       // Check that schedule property is set
@@ -345,7 +332,7 @@ describe('TRVZBSchedulerCard - Integration Tests', () => {
       toggleButton!.click();
       await waitForUpdate(card);
 
-      const graphView = queryShadow(card, 'schedule-graph-view');
+      const graphView = queryShadow(card, 'hive-schedule-graph-view');
       expect(graphView).toBeTruthy();
 
       // Check that schedule property is set
@@ -358,7 +345,7 @@ describe('TRVZBSchedulerCard - Integration Tests', () => {
       // Create card without setting hass yet
       const newCard = createCard();
       newCard.setConfig({
-        type: 'custom:trvzb-scheduler-card',
+        type: 'custom:hive-scheduler-card', mqtt_device: 'Hive Reciever',
         entity: scenario.entityId
       });
       await waitForUpdate(newCard);
@@ -375,8 +362,8 @@ describe('TRVZBSchedulerCard - Integration Tests', () => {
 
       // Create new schedule
       const newSchedule = createMockSchedule('minimal');
-      const updatedEntity = createMockTRVZBEntity('living_room_trvzb', newSchedule);
-      const updatedDaySensors = createMockDaySensors('living_room_trvzb', newSchedule);
+      const updatedEntity = createMockHiveEntity('living_room_hive', newSchedule);
+      const updatedDaySensors = createMockDaySensors('living_room_hive', newSchedule);
 
       // Update hass with new entity and day sensor states
       const updatedHass = createMockHass({
@@ -399,7 +386,7 @@ describe('TRVZBSchedulerCard - Integration Tests', () => {
   describe('Day Editing', () => {
     beforeEach(async () => {
       card.setConfig({
-        type: 'custom:trvzb-scheduler-card',
+        type: 'custom:hive-scheduler-card', mqtt_device: 'Hive Reciever',
         entity: scenario.entityId
       });
       card.hass = scenario.hass;
@@ -407,7 +394,7 @@ describe('TRVZBSchedulerCard - Integration Tests', () => {
     });
 
     it('should open day editor when day is selected', async () => {
-      const weekView = queryShadow(card, 'schedule-week-view');
+      const weekView = queryShadow(card, 'hive-schedule-week-view');
       expect(weekView).toBeTruthy();
 
       // Simulate day-selected event
@@ -415,59 +402,59 @@ describe('TRVZBSchedulerCard - Integration Tests', () => {
       await waitForUpdate(card);
 
       // Day editor should now be rendered
-      const dayEditor = queryShadow(card, 'day-schedule-editor');
+      const dayEditor = queryShadow(card, 'hive-day-schedule-editor');
       expect(dayEditor).toBeTruthy();
     });
 
     it('should pass correct day to day editor', async () => {
-      const weekView = queryShadow(card, 'schedule-week-view');
+      const weekView = queryShadow(card, 'hive-schedule-week-view');
 
       dispatchCustomEvent(weekView!, 'day-selected', { day: 'wednesday' as DayOfWeek });
       await waitForUpdate(card);
 
-      const dayEditor = queryShadow(card, 'day-schedule-editor');
+      const dayEditor = queryShadow(card, 'hive-day-schedule-editor');
       const editorDay = (dayEditor as any).day;
       expect(editorDay).toBe('wednesday');
     });
 
     it('should pass correct schedule to day editor', async () => {
-      const weekView = queryShadow(card, 'schedule-week-view');
+      const weekView = queryShadow(card, 'hive-schedule-week-view');
       const originalSchedule = (card as any)._schedule;
 
       dispatchCustomEvent(weekView!, 'day-selected', { day: 'friday' as DayOfWeek });
       await waitForUpdate(card);
 
-      const dayEditor = queryShadow(card, 'day-schedule-editor');
+      const dayEditor = queryShadow(card, 'hive-day-schedule-editor');
       const editorSchedule = (dayEditor as any).schedule;
 
       expect(editorSchedule).toEqual(originalSchedule.friday);
     });
 
     it('should close day editor when editor-closed event is dispatched', async () => {
-      const weekView = queryShadow(card, 'schedule-week-view');
+      const weekView = queryShadow(card, 'hive-schedule-week-view');
 
       // Open editor
       dispatchCustomEvent(weekView!, 'day-selected', { day: 'monday' as DayOfWeek });
       await waitForUpdate(card);
 
-      let dayEditor = queryShadow(card, 'day-schedule-editor');
+      let dayEditor = queryShadow(card, 'hive-day-schedule-editor');
       expect(dayEditor).toBeTruthy();
 
       // Close editor
       dispatchCustomEvent(dayEditor!, 'editor-closed', {});
       await waitForUpdate(card);
 
-      dayEditor = queryShadow(card, 'day-schedule-editor');
+      dayEditor = queryShadow(card, 'hive-day-schedule-editor');
       expect(dayEditor).toBeFalsy();
     });
 
     it('should set open property on day editor', async () => {
-      const weekView = queryShadow(card, 'schedule-week-view');
+      const weekView = queryShadow(card, 'hive-schedule-week-view');
 
       dispatchCustomEvent(weekView!, 'day-selected', { day: 'tuesday' as DayOfWeek });
       await waitForUpdate(card);
 
-      const dayEditor = queryShadow(card, 'day-schedule-editor');
+      const dayEditor = queryShadow(card, 'hive-day-schedule-editor');
       const isOpen = (dayEditor as any).open;
       expect(isOpen).toBe(true);
     });
@@ -476,7 +463,7 @@ describe('TRVZBSchedulerCard - Integration Tests', () => {
   describe('Schedule Changes', () => {
     beforeEach(async () => {
       card.setConfig({
-        type: 'custom:trvzb-scheduler-card',
+        type: 'custom:hive-scheduler-card', mqtt_device: 'Hive Reciever',
         entity: scenario.entityId
       });
       card.hass = scenario.hass;
@@ -484,14 +471,14 @@ describe('TRVZBSchedulerCard - Integration Tests', () => {
     });
 
     it('should update internal state when day schedule changes', async () => {
-      const weekView = queryShadow(card, 'schedule-week-view');
+      const weekView = queryShadow(card, 'hive-schedule-week-view');
       const originalSchedule = (card as any)._schedule;
 
       // Open editor
       dispatchCustomEvent(weekView!, 'day-selected', { day: 'monday' as DayOfWeek });
       await waitForUpdate(card);
 
-      const dayEditor = queryShadow(card, 'day-schedule-editor');
+      const dayEditor = queryShadow(card, 'hive-day-schedule-editor');
 
       // Simulate schedule change
       const newDaySchedule = {
@@ -520,11 +507,11 @@ describe('TRVZBSchedulerCard - Integration Tests', () => {
       // Initially should be false
       expect((card as any)._hasUnsavedChanges).toBe(false);
 
-      const weekView = queryShadow(card, 'schedule-week-view');
+      const weekView = queryShadow(card, 'hive-schedule-week-view');
       dispatchCustomEvent(weekView!, 'day-selected', { day: 'monday' as DayOfWeek });
       await waitForUpdate(card);
 
-      const dayEditor = queryShadow(card, 'day-schedule-editor');
+      const dayEditor = queryShadow(card, 'hive-day-schedule-editor');
 
       dispatchCustomEvent(dayEditor!, 'schedule-changed', {
         day: 'monday' as DayOfWeek,
@@ -538,11 +525,11 @@ describe('TRVZBSchedulerCard - Integration Tests', () => {
     });
 
     it('should enable save button when changes exist', async () => {
-      const weekView = queryShadow(card, 'schedule-week-view');
+      const weekView = queryShadow(card, 'hive-schedule-week-view');
       dispatchCustomEvent(weekView!, 'day-selected', { day: 'monday' as DayOfWeek });
       await waitForUpdate(card);
 
-      const dayEditor = queryShadow(card, 'day-schedule-editor');
+      const dayEditor = queryShadow(card, 'hive-day-schedule-editor');
 
       dispatchCustomEvent(dayEditor!, 'schedule-changed', {
         day: 'monday' as DayOfWeek,
@@ -564,11 +551,11 @@ describe('TRVZBSchedulerCard - Integration Tests', () => {
     });
 
     it('should preserve changes when switching views', async () => {
-      const weekView = queryShadow(card, 'schedule-week-view');
+      const weekView = queryShadow(card, 'hive-schedule-week-view');
       dispatchCustomEvent(weekView!, 'day-selected', { day: 'sunday' as DayOfWeek });
       await waitForUpdate(card);
 
-      const dayEditor = queryShadow(card, 'day-schedule-editor');
+      const dayEditor = queryShadow(card, 'hive-day-schedule-editor');
       const newSchedule = {
         transitions: [{ time: '00:00', temperature: 25 }]
       };
@@ -597,7 +584,7 @@ describe('TRVZBSchedulerCard - Integration Tests', () => {
   describe('Copy Schedule', () => {
     beforeEach(async () => {
       card.setConfig({
-        type: 'custom:trvzb-scheduler-card',
+        type: 'custom:hive-scheduler-card', mqtt_device: 'Hive Reciever',
         entity: scenario.entityId
       });
       card.hass = scenario.hass;
@@ -605,40 +592,40 @@ describe('TRVZBSchedulerCard - Integration Tests', () => {
     });
 
     it('should open copy dialog when copy is requested', async () => {
-      const weekView = queryShadow(card, 'schedule-week-view');
+      const weekView = queryShadow(card, 'hive-schedule-week-view');
 
       // Open day editor
       dispatchCustomEvent(weekView!, 'day-selected', { day: 'monday' as DayOfWeek });
       await waitForUpdate(card);
 
-      const dayEditor = queryShadow(card, 'day-schedule-editor');
+      const dayEditor = queryShadow(card, 'hive-day-schedule-editor');
 
       // Request copy
       dispatchCustomEvent(dayEditor!, 'copy-requested', { day: 'monday' as DayOfWeek });
       await waitForUpdate(card);
 
-      const copyDialog = queryShadow(card, 'copy-schedule-dialog');
+      const copyDialog = queryShadow(card, 'hive-copy-schedule-dialog');
       expect(copyDialog).toBeTruthy();
     });
 
     it('should pass correct source day to copy dialog', async () => {
-      const weekView = queryShadow(card, 'schedule-week-view');
+      const weekView = queryShadow(card, 'hive-schedule-week-view');
 
       dispatchCustomEvent(weekView!, 'day-selected', { day: 'thursday' as DayOfWeek });
       await waitForUpdate(card);
 
-      const dayEditor = queryShadow(card, 'day-schedule-editor');
+      const dayEditor = queryShadow(card, 'hive-day-schedule-editor');
 
       dispatchCustomEvent(dayEditor!, 'copy-requested', { day: 'thursday' as DayOfWeek });
       await waitForUpdate(card);
 
-      const copyDialog = queryShadow(card, 'copy-schedule-dialog');
+      const copyDialog = queryShadow(card, 'hive-copy-schedule-dialog');
       const sourceDay = (copyDialog as any).sourceDay;
       expect(sourceDay).toBe('thursday');
     });
 
     it('should copy schedule to target days when confirmed', async () => {
-      const weekView = queryShadow(card, 'schedule-week-view');
+      const weekView = queryShadow(card, 'hive-schedule-week-view');
       const originalSchedule = (card as any)._schedule;
       const mondaySchedule = { ...originalSchedule.monday };
 
@@ -646,13 +633,13 @@ describe('TRVZBSchedulerCard - Integration Tests', () => {
       dispatchCustomEvent(weekView!, 'day-selected', { day: 'monday' as DayOfWeek });
       await waitForUpdate(card);
 
-      const dayEditor = queryShadow(card, 'day-schedule-editor');
+      const dayEditor = queryShadow(card, 'hive-day-schedule-editor');
 
       // Request copy
       dispatchCustomEvent(dayEditor!, 'copy-requested', { day: 'monday' as DayOfWeek });
       await waitForUpdate(card);
 
-      const copyDialog = queryShadow(card, 'copy-schedule-dialog');
+      const copyDialog = queryShadow(card, 'hive-copy-schedule-dialog');
 
       // Confirm copy to tuesday and wednesday
       dispatchCustomEvent(copyDialog!, 'copy-confirmed', {
@@ -676,16 +663,16 @@ describe('TRVZBSchedulerCard - Integration Tests', () => {
     });
 
     it('should close copy dialog after confirmation', async () => {
-      const weekView = queryShadow(card, 'schedule-week-view');
+      const weekView = queryShadow(card, 'hive-schedule-week-view');
 
       dispatchCustomEvent(weekView!, 'day-selected', { day: 'friday' as DayOfWeek });
       await waitForUpdate(card);
 
-      const dayEditor = queryShadow(card, 'day-schedule-editor');
+      const dayEditor = queryShadow(card, 'hive-day-schedule-editor');
       dispatchCustomEvent(dayEditor!, 'copy-requested', { day: 'friday' as DayOfWeek });
       await waitForUpdate(card);
 
-      let copyDialog = queryShadow(card, 'copy-schedule-dialog');
+      let copyDialog = queryShadow(card, 'hive-copy-schedule-dialog');
       expect(copyDialog).toBeTruthy();
 
       dispatchCustomEvent(copyDialog!, 'copy-confirmed', {
@@ -693,44 +680,44 @@ describe('TRVZBSchedulerCard - Integration Tests', () => {
       });
       await waitForUpdate(card);
 
-      copyDialog = queryShadow(card, 'copy-schedule-dialog');
+      copyDialog = queryShadow(card, 'hive-copy-schedule-dialog');
       expect(copyDialog).toBeFalsy();
     });
 
     it('should close copy dialog when dialog-closed event is dispatched', async () => {
-      const weekView = queryShadow(card, 'schedule-week-view');
+      const weekView = queryShadow(card, 'hive-schedule-week-view');
 
       dispatchCustomEvent(weekView!, 'day-selected', { day: 'sunday' as DayOfWeek });
       await waitForUpdate(card);
 
-      const dayEditor = queryShadow(card, 'day-schedule-editor');
+      const dayEditor = queryShadow(card, 'hive-day-schedule-editor');
       dispatchCustomEvent(dayEditor!, 'copy-requested', { day: 'sunday' as DayOfWeek });
       await waitForUpdate(card);
 
-      let copyDialog = queryShadow(card, 'copy-schedule-dialog');
+      let copyDialog = queryShadow(card, 'hive-copy-schedule-dialog');
       expect(copyDialog).toBeTruthy();
 
       dispatchCustomEvent(copyDialog!, 'dialog-closed', {});
       await waitForUpdate(card);
 
-      copyDialog = queryShadow(card, 'copy-schedule-dialog');
+      copyDialog = queryShadow(card, 'hive-copy-schedule-dialog');
       expect(copyDialog).toBeFalsy();
     });
 
     it('should mark as having unsaved changes after copy', async () => {
-      const weekView = queryShadow(card, 'schedule-week-view');
+      const weekView = queryShadow(card, 'hive-schedule-week-view');
 
       dispatchCustomEvent(weekView!, 'day-selected', { day: 'monday' as DayOfWeek });
       await waitForUpdate(card);
 
-      const dayEditor = queryShadow(card, 'day-schedule-editor');
+      const dayEditor = queryShadow(card, 'hive-day-schedule-editor');
       dispatchCustomEvent(dayEditor!, 'copy-requested', { day: 'monday' as DayOfWeek });
       await waitForUpdate(card);
 
-      const copyDialog = queryShadow(card, 'copy-schedule-dialog');
+      const copyDialog = queryShadow(card, 'hive-copy-schedule-dialog');
 
       dispatchCustomEvent(copyDialog!, 'copy-confirmed', {
-        targetDays: ['tuesday'] as DayOfWeek[]
+        targetDays: ['saturday'] as DayOfWeek[]
       });
       await waitForUpdate(card);
 
@@ -741,7 +728,7 @@ describe('TRVZBSchedulerCard - Integration Tests', () => {
   describe('Save Operation', () => {
     beforeEach(async () => {
       card.setConfig({
-        type: 'custom:trvzb-scheduler-card',
+        type: 'custom:hive-scheduler-card', mqtt_device: 'Hive Reciever',
         entity: scenario.entityId
       });
       card.hass = scenario.hass;
@@ -750,11 +737,11 @@ describe('TRVZBSchedulerCard - Integration Tests', () => {
 
     it('should call mqtt.publish service when save is clicked', async () => {
       // Make a change to enable save
-      const weekView = queryShadow(card, 'schedule-week-view');
+      const weekView = queryShadow(card, 'hive-schedule-week-view');
       dispatchCustomEvent(weekView!, 'day-selected', { day: 'monday' as DayOfWeek });
       await waitForUpdate(card);
 
-      const dayEditor = queryShadow(card, 'day-schedule-editor');
+      const dayEditor = queryShadow(card, 'hive-day-schedule-editor');
       dispatchCustomEvent(dayEditor!, 'schedule-changed', {
         day: 'monday' as DayOfWeek,
         schedule: { transitions: [{ time: '00:00', temperature: 20 }] }
@@ -776,11 +763,11 @@ describe('TRVZBSchedulerCard - Integration Tests', () => {
 
     it('should pass correct topic to mqtt.publish', async () => {
       // Make a change
-      const weekView = queryShadow(card, 'schedule-week-view');
+      const weekView = queryShadow(card, 'hive-schedule-week-view');
       dispatchCustomEvent(weekView!, 'day-selected', { day: 'monday' as DayOfWeek });
       await waitForUpdate(card);
 
-      const dayEditor = queryShadow(card, 'day-schedule-editor');
+      const dayEditor = queryShadow(card, 'hive-day-schedule-editor');
       dispatchCustomEvent(dayEditor!, 'schedule-changed', {
         day: 'monday' as DayOfWeek,
         schedule: { transitions: [{ time: '00:00', temperature: 20 }] }
@@ -794,22 +781,22 @@ describe('TRVZBSchedulerCard - Integration Tests', () => {
       await new Promise(resolve => setTimeout(resolve, 10));
 
       // Bulk update: single MQTT call to base /set topic
-      const calls = scenario.recorder.getCalls('mqtt', 'publish');
+      const calls = scenario.recorder.getCalls('mqtt', 'publish').filter(call => String(call.data.topic).endsWith('/set'));
       expect(calls.length).toBe(1);
 
       // Verify topic is base /set (not per-day topics)
       expect(calls[0].domain).toBe('mqtt');
       expect(calls[0].service).toBe('publish');
-      expect(calls[0].data.topic).toBe('zigbee2mqtt/living_room_trvzb/set');
+      expect(calls[0].data.topic).toBe('zigbee2mqtt/Hive Reciever/set');
     });
 
-    it('should pass weekly_schedule in payload', async () => {
+    it('should pass schedule_monday in payload', async () => {
       // Make a change
-      const weekView = queryShadow(card, 'schedule-week-view');
+      const weekView = queryShadow(card, 'hive-schedule-week-view');
       dispatchCustomEvent(weekView!, 'day-selected', { day: 'monday' as DayOfWeek });
       await waitForUpdate(card);
 
-      const dayEditor = queryShadow(card, 'day-schedule-editor');
+      const dayEditor = queryShadow(card, 'hive-day-schedule-editor');
       dispatchCustomEvent(dayEditor!, 'schedule-changed', {
         day: 'monday' as DayOfWeek,
         schedule: { transitions: [{ time: '00:00', temperature: 20 }] }
@@ -823,30 +810,30 @@ describe('TRVZBSchedulerCard - Integration Tests', () => {
       await new Promise(resolve => setTimeout(resolve, 10));
 
       // Bulk update: single JSON payload with only changed days
-      const calls = scenario.recorder.getCalls('mqtt', 'publish');
+      const calls = scenario.recorder.getCalls('mqtt', 'publish').filter(call => String(call.data.topic).endsWith('/set'));
       expect(calls.length).toBe(1);
 
       // Verify topic is base /set
-      expect(calls[0].data.topic).toBe('zigbee2mqtt/living_room_trvzb/set');
+      expect(calls[0].data.topic).toBe('zigbee2mqtt/Hive Reciever/set');
 
       // Payload should be JSON string containing only Monday (the changed day)
       const payload = JSON.parse(calls[0].data.payload as string);
-      expect(payload).toHaveProperty('weekly_schedule_monday');
-      expect(typeof payload.weekly_schedule_monday).toBe('string');
-      expect(payload.weekly_schedule_monday).toContain('00:00/');
+      expect(payload).toHaveProperty('schedule_monday');
+      expect(typeof payload.schedule_monday).toBe('string');
+      expect(payload.schedule_monday).toContain('00:00/');
 
       // Should not contain other days (they didn't change)
-      expect(payload).not.toHaveProperty('weekly_schedule_tuesday');
-      expect(payload).not.toHaveProperty('weekly_schedule_sunday');
+      expect(payload).not.toHaveProperty('schedule_tuesday');
+      expect(payload).not.toHaveProperty('schedule_sunday');
     });
 
     it('should show loading state during save', async () => {
       // Make a change
-      const weekView = queryShadow(card, 'schedule-week-view');
+      const weekView = queryShadow(card, 'hive-schedule-week-view');
       dispatchCustomEvent(weekView!, 'day-selected', { day: 'monday' as DayOfWeek });
       await waitForUpdate(card);
 
-      const dayEditor = queryShadow(card, 'day-schedule-editor');
+      const dayEditor = queryShadow(card, 'hive-day-schedule-editor');
       dispatchCustomEvent(dayEditor!, 'schedule-changed', {
         day: 'monday' as DayOfWeek,
         schedule: { transitions: [{ time: '00:00', temperature: 20 }] }
@@ -864,11 +851,11 @@ describe('TRVZBSchedulerCard - Integration Tests', () => {
 
     it('should clear hasUnsavedChanges after successful save', async () => {
       // Make a change
-      const weekView = queryShadow(card, 'schedule-week-view');
+      const weekView = queryShadow(card, 'hive-schedule-week-view');
       dispatchCustomEvent(weekView!, 'day-selected', { day: 'monday' as DayOfWeek });
       await waitForUpdate(card);
 
-      const dayEditor = queryShadow(card, 'day-schedule-editor');
+      const dayEditor = queryShadow(card, 'hive-day-schedule-editor');
       dispatchCustomEvent(dayEditor!, 'schedule-changed', {
         day: 'monday' as DayOfWeek,
         schedule: { transitions: [{ time: '00:00', temperature: 20 }] }
@@ -889,6 +876,7 @@ describe('TRVZBSchedulerCard - Integration Tests', () => {
     it('should display error message on save failure', async () => {
       // Create hass that throws error but with proper states (including sensor)
       const failingHass = {
+        ...scenario.hass,
         states: scenario.hass.states,
         callService: vi.fn().mockRejectedValue(new Error('Network error'))
       } as unknown as HomeAssistant;
@@ -896,11 +884,11 @@ describe('TRVZBSchedulerCard - Integration Tests', () => {
       card.hass = failingHass;
 
       // Make a change
-      const weekView = queryShadow(card, 'schedule-week-view');
+      const weekView = queryShadow(card, 'hive-schedule-week-view');
       dispatchCustomEvent(weekView!, 'day-selected', { day: 'monday' as DayOfWeek });
       await waitForUpdate(card);
 
-      const dayEditor = queryShadow(card, 'day-schedule-editor');
+      const dayEditor = queryShadow(card, 'hive-day-schedule-editor');
       dispatchCustomEvent(dayEditor!, 'schedule-changed', {
         day: 'monday' as DayOfWeek,
         schedule: { transitions: [{ time: '00:00', temperature: 20 }] }
@@ -923,11 +911,11 @@ describe('TRVZBSchedulerCard - Integration Tests', () => {
 
     it('should disable save button when already saving', async () => {
       // Make a change
-      const weekView = queryShadow(card, 'schedule-week-view');
+      const weekView = queryShadow(card, 'hive-schedule-week-view');
       dispatchCustomEvent(weekView!, 'day-selected', { day: 'monday' as DayOfWeek });
       await waitForUpdate(card);
 
-      const dayEditor = queryShadow(card, 'day-schedule-editor');
+      const dayEditor = queryShadow(card, 'hive-day-schedule-editor');
       dispatchCustomEvent(dayEditor!, 'schedule-changed', {
         day: 'monday' as DayOfWeek,
         schedule: { transitions: [{ time: '00:00', temperature: 20 }] }
@@ -951,13 +939,13 @@ describe('TRVZBSchedulerCard - Integration Tests', () => {
       await waitForUpdate(card);
     });
 
-    it('should show "Saving..." text when save in progress', async () => {
+    it('should show "Verifying..." text when save in progress', async () => {
       // Make a change
-      const weekView = queryShadow(card, 'schedule-week-view');
+      const weekView = queryShadow(card, 'hive-schedule-week-view');
       dispatchCustomEvent(weekView!, 'day-selected', { day: 'monday' as DayOfWeek });
       await waitForUpdate(card);
 
-      const dayEditor = queryShadow(card, 'day-schedule-editor');
+      const dayEditor = queryShadow(card, 'hive-day-schedule-editor');
       dispatchCustomEvent(dayEditor!, 'schedule-changed', {
         day: 'monday' as DayOfWeek,
         schedule: { transitions: [{ time: '00:00', temperature: 20 }] }
@@ -971,7 +959,7 @@ describe('TRVZBSchedulerCard - Integration Tests', () => {
       const saveButton = queryShadow<HTMLButtonElement>(card, '.save-button');
 
       // Check button text when saving
-      expect(saveButton!.textContent?.trim()).toBe('Saving...');
+      expect(saveButton!.textContent?.trim()).toBe('Verifying...');
 
       // Reset state
       (card as any)._saving = false;
@@ -997,11 +985,11 @@ describe('TRVZBSchedulerCard - Integration Tests', () => {
 
     it('should include multiple changed days in single payload', async () => {
       // Change Monday
-      const weekView = queryShadow(card, 'schedule-week-view');
+      const weekView = queryShadow(card, 'hive-schedule-week-view');
       dispatchCustomEvent(weekView!, 'day-selected', { day: 'monday' as DayOfWeek });
       await waitForUpdate(card);
 
-      const dayEditor = queryShadow(card, 'day-schedule-editor');
+      const dayEditor = queryShadow(card, 'hive-day-schedule-editor');
       dispatchCustomEvent(dayEditor!, 'schedule-changed', {
         day: 'monday' as DayOfWeek,
         schedule: { transitions: [{ time: '00:00', temperature: 25 }] }
@@ -1012,7 +1000,7 @@ describe('TRVZBSchedulerCard - Integration Tests', () => {
       dispatchCustomEvent(weekView!, 'day-selected', { day: 'friday' as DayOfWeek });
       await waitForUpdate(card);
 
-      const dayEditor2 = queryShadow(card, 'day-schedule-editor');
+      const dayEditor2 = queryShadow(card, 'hive-day-schedule-editor');
       dispatchCustomEvent(dayEditor2!, 'schedule-changed', {
         day: 'friday' as DayOfWeek,
         schedule: { transitions: [{ time: '00:00', temperature: 22 }] }
@@ -1025,26 +1013,26 @@ describe('TRVZBSchedulerCard - Integration Tests', () => {
       await waitForUpdate(card);
       await new Promise(resolve => setTimeout(resolve, 10));
 
-      const calls = scenario.recorder.getCalls('mqtt', 'publish');
+      const calls = scenario.recorder.getCalls('mqtt', 'publish').filter(call => String(call.data.topic).endsWith('/set'));
       expect(calls.length).toBe(1);
 
       const payload = JSON.parse(calls[0].data.payload as string);
       expect(Object.keys(payload).length).toBe(2);
-      expect(payload).toHaveProperty('weekly_schedule_monday');
-      expect(payload).toHaveProperty('weekly_schedule_friday');
-      expect(payload.weekly_schedule_monday).toBe('00:00/25');
-      expect(payload.weekly_schedule_friday).toBe('00:00/22');
+      expect(payload).toHaveProperty('schedule_monday');
+      expect(payload).toHaveProperty('schedule_friday');
+      expect(payload.schedule_monday).toBe('00:00/25');
+      expect(payload.schedule_friday).toBe('00:00/22');
     });
 
     it('should update _originalSchedule after successful save', async () => {
       const originalBefore = (card as any)._originalSchedule;
 
       // Make a change
-      const weekView = queryShadow(card, 'schedule-week-view');
+      const weekView = queryShadow(card, 'hive-schedule-week-view');
       dispatchCustomEvent(weekView!, 'day-selected', { day: 'tuesday' as DayOfWeek });
       await waitForUpdate(card);
 
-      const dayEditor = queryShadow(card, 'day-schedule-editor');
+      const dayEditor = queryShadow(card, 'hive-day-schedule-editor');
       dispatchCustomEvent(dayEditor!, 'schedule-changed', {
         day: 'tuesday' as DayOfWeek,
         schedule: { transitions: [{ time: '00:00', temperature: 30 }] }
@@ -1071,14 +1059,14 @@ describe('TRVZBSchedulerCard - Integration Tests', () => {
   describe('Edge Cases and Error Handling', () => {
     it('should handle rapid entity changes gracefully', async () => {
       card.setConfig({
-        type: 'custom:trvzb-scheduler-card',
+        type: 'custom:hive-scheduler-card', mqtt_device: 'Hive Reciever',
         entity: scenario.entityId
       });
 
       // Rapidly change hass object
       for (let i = 0; i < 5; i++) {
-        const newEntity = createMockTRVZBEntity('living_room_trvzb');
-        const newDaySensors = createMockDaySensors('living_room_trvzb');
+        const newEntity = createMockHiveEntity('living_room_hive');
+        const newDaySensors = createMockDaySensors('living_room_hive');
         const newHass = createMockHass({
           states: {
             [scenario.entityId]: newEntity,
@@ -1097,7 +1085,7 @@ describe('TRVZBSchedulerCard - Integration Tests', () => {
 
     it('should handle missing hass gracefully', async () => {
       card.setConfig({
-        type: 'custom:trvzb-scheduler-card',
+        type: 'custom:hive-scheduler-card', mqtt_device: 'Hive Reciever',
         entity: 'climate.test'
       });
 
@@ -1111,14 +1099,14 @@ describe('TRVZBSchedulerCard - Integration Tests', () => {
 
     it('should handle config changes after initialization', async () => {
       card.setConfig({
-        type: 'custom:trvzb-scheduler-card',
+        type: 'custom:hive-scheduler-card', mqtt_device: 'Hive Reciever',
         entity: scenario.entityId
       });
       card.hass = scenario.hass;
       await waitForUpdate(card);
 
       // Change config
-      const newEntity = createMockTRVZBEntity('new_entity');
+      const newEntity = createMockHiveEntity('new_entity');
       const newDaySensors = createMockDaySensors('new_entity');
       const newHass = createMockHass({
         states: {
@@ -1128,7 +1116,7 @@ describe('TRVZBSchedulerCard - Integration Tests', () => {
       });
 
       card.setConfig({
-        type: 'custom:trvzb-scheduler-card',
+        type: 'custom:hive-scheduler-card', mqtt_device: 'Hive Reciever',
         entity: 'climate.new_entity'
       });
       card.hass = newHass;
@@ -1145,7 +1133,7 @@ describe('TRVZBSchedulerCard - Integration Tests', () => {
     });
 
     it('should provide stub config for UI editor', () => {
-      const stubConfig = TRVZBSchedulerCard.getStubConfig();
+      const stubConfig = HiveSchedulerCard.getStubConfig();
       expect(stubConfig).toBeTruthy();
       expect(stubConfig).toHaveProperty('entity');
     });

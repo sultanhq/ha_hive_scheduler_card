@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   createMockHass,
-  createMockTRVZBEntity,
+  createMockHiveEntity,
   createMockSchedule,
   createTestScenario,
   MockServiceCallRecorder,
@@ -24,7 +24,7 @@ describe('hass-mock', () => {
     });
 
     it('should create a mock with provided states', () => {
-      const entity = createMockTRVZBEntity();
+      const entity = createMockHiveEntity();
       const hass = createMockHass({
         states: { [entity.entity_id]: entity },
       });
@@ -50,11 +50,11 @@ describe('hass-mock', () => {
     });
   });
 
-  describe('createMockTRVZBEntity', () => {
-    it('should create a TRVZB entity with default values', () => {
-      const entity = createMockTRVZBEntity();
+  describe('createMockHiveEntity', () => {
+    it('should create a Hive SLR1c entity with default values', () => {
+      const entity = createMockHiveEntity();
 
-      expect(entity.entity_id).toBe('climate.living_room_trvzb');
+      expect(entity.entity_id).toBe('climate.living_room_hive');
       expect(entity.state).toBe('heat');
       expect(entity.attributes.min_temp).toBe(4);
       expect(entity.attributes.max_temp).toBe(35);
@@ -63,7 +63,7 @@ describe('hass-mock', () => {
     });
 
     it('should create entity with custom friendly name', () => {
-      const entity = createMockTRVZBEntity('bedroom_radiator');
+      const entity = createMockHiveEntity('bedroom_radiator');
 
       expect(entity.entity_id).toBe('climate.bedroom_radiator');
       expect(entity.attributes.friendly_name).toBe('Bedroom Radiator');
@@ -71,7 +71,7 @@ describe('hass-mock', () => {
 
     it('should include provided schedule', () => {
       const customSchedule = createMockSchedule('minimal');
-      const entity = createMockTRVZBEntity('test', customSchedule);
+      const entity = createMockHiveEntity('test', customSchedule);
 
       expect(entity.attributes.weekly_schedule).toEqual(customSchedule);
     });
@@ -202,14 +202,14 @@ describe('hass-mock', () => {
       expect(scenario.hass).toBeDefined();
       expect(scenario.recorder).toBeDefined();
       expect(scenario.entity).toBeDefined();
-      expect(scenario.entityId).toBe('climate.living_room_trvzb');
+      expect(scenario.entityId).toBe('climate.living_room_hive');
       expect(scenario.hass.states[scenario.entityId]).toEqual(scenario.entity);
     });
 
     it('should create scenario with custom entity', () => {
-      const scenario = createTestScenario('bedroom_trvzb');
+      const scenario = createTestScenario('bedroom_hive');
 
-      expect(scenario.entityId).toBe('climate.bedroom_trvzb');
+      expect(scenario.entityId).toBe('climate.bedroom_hive');
       expect(scenario.hass.states[scenario.entityId]).toBeDefined();
     });
 
@@ -274,7 +274,7 @@ describe('hass-mock', () => {
 
   describe('sample data constants', () => {
     it('should export SAMPLE_ENTITY_ID', () => {
-      expect(SAMPLE_ENTITY_ID).toBe('climate.living_room_trvzb');
+      expect(SAMPLE_ENTITY_ID).toBe('climate.living_room_hive');
     });
 
     it('should export SAMPLE_DAY_SCHEDULE_STRING', () => {

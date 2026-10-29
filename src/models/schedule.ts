@@ -5,6 +5,7 @@
 
 import { DaySchedule, Transition, WeeklySchedule, MQTTWeeklySchedule, DayOfWeek, DAYS_OF_WEEK, ScheduleDiff, MQTTPartialPayload } from './types';
 import { compareTime } from '../utils/time';
+import { validateDaySchedule } from '../utils/validation';
 
 /**
  * Counter for generating unique transition IDs within a session
@@ -37,71 +38,25 @@ export function ensureTransitionId(transition: Transition): Transition {
  * @returns Parsed day schedule
  */
 export function parseDaySchedule(scheduleString: string): DaySchedule {
-  // Handle empty or whitespace-only strings
-  const trimmed = scheduleString.trim();
-  if (!trimmed) {
-    return createEmptyDaySchedule();
+  if (typeof scheduleString !== 'string' || !scheduleString.trim()) {
+    throw new Error('Schedule is empty; request a fresh receiver schedule.');
   }
-
-  try {
-    // Split by spaces and parse each transition
-    const parts = trimmed.split(/\s+/);
-    const transitions: Transition[] = [];
-
-    for (const part of parts) {
-      // Each part should be "HH:mm/temperature"
-      const match = part.match(/^(\d{2}:\d{2})\/(\d+(?:\.\d+)?)$/);
-      if (!match) {
-        console.warn(`Malformed transition: ${part}, skipping`);
-        continue;
-      }
-
-      const time = match[1];
-      const temperature = parseFloat(match[2]);
-
-      transitions.push({ id: generateTransitionId(), time, temperature });
-    }
-
-    // If no valid transitions were parsed, return default
-    if (transitions.length === 0) {
-      return createEmptyDaySchedule();
-    }
-
-    // Remove duplicate transitions (keep first occurrence of each time)
-    const deduplicated = removeDuplicateTransitions(transitions);
-
-    // Ensure midnight transition and sort
-    const schedule = { transitions: deduplicated };
-    return ensureMidnightTransition(schedule);
-  } catch (error) {
-    console.error('Error parsing day schedule:', error);
-    return createEmptyDaySchedule();
-  }
+  const transitions = scheduleString.trim().split(/\s+/).map(part => {
+    const match = /^(\d{2}:\d{2})\/(\d+(?:\.\d{1,2})?)$/.exec(part);
+    if (!match) throw new Error(`Malformed transition: ${part}. Expected HH:mm/temperature.`);
+    return { id: generateTransitionId(), time: match[1], temperature: Number(match[2]) };
+  });
+  const result = validateDaySchedule({ transitions });
+  if (!result.valid) throw new Error(result.errors.join('; '));
+  return { transitions: removeDuplicateTransitions(transitions) };
 }
 
-/**
- * Serialize a day schedule to MQTT format string
- *
- * @param schedule - Day schedule to serialize
- * @returns Space-separated string in HH:mm/temperature format
- */
+/** Serialize only validated native transitions; never insert or sort points. */
 export function serializeDaySchedule(schedule: DaySchedule): string {
-  // Remove duplicates (keep first occurrence of each time)
-  const deduplicated = removeDuplicateTransitions(schedule.transitions);
-
-  // Sort transitions before serializing
-  const sorted = sortTransitions(deduplicated);
-
-  // Convert each transition to "HH:mm/temperature" format
-  const parts = sorted.map(t => {
-    // Format temperature to remove unnecessary decimals
-    const temp = t.temperature % 1 === 0
-      ? t.temperature.toFixed(0)
-      : t.temperature.toFixed(1);
-    return `${t.time}/${temp}`;
-  });
-
-  return parts.join(' ');
+  const result = validateDaySchedule(schedule);
+  if (!result.valid) throw new Error(result.errors.join('; '));
+  return removeDuplicateTransitions(schedule.transitions)
+    .map(t => `${t.time}/${t.temperature}`).join(' ');
 }
 
 /**
@@ -133,18 +88,16 @@ export function serializeWeeklySchedule(schedule: WeeklySchedule): MQTTWeeklySch
 }
 
 /**
- * Create an empty day schedule with default 00:00/20 transition
+ * Create an empty draft; it is invalid until the user adds a transition
  */
 export function createEmptyDaySchedule(): DaySchedule {
   return {
-    transitions: [
-      { id: generateTransitionId(), time: '00:00', temperature: 20 }
-    ]
+    transitions: []
   };
 }
 
 /**
- * Create an empty weekly schedule with defaults for all days
+ * Create an empty weekly draft
  */
 export function createEmptyWeeklySchedule(): WeeklySchedule {
   const schedule = {} as WeeklySchedule;
@@ -152,29 +105,6 @@ export function createEmptyWeeklySchedule(): WeeklySchedule {
     schedule[day] = createEmptyDaySchedule();
   }
   return schedule;
-}
-
-/**
- * Ensure a day schedule has a midnight (00:00) transition
- * If missing, adds one with temperature 20°C at the beginning
- *
- * @param schedule - Day schedule to check
- * @returns Schedule with guaranteed midnight transition
- */
-export function ensureMidnightTransition(schedule: DaySchedule): DaySchedule {
-  const transitions = [...schedule.transitions];
-
-  // Check if there's already a 00:00 transition
-  const hasMidnight = transitions.some(t => t.time === '00:00');
-
-  if (!hasMidnight) {
-    // Add default midnight transition with a new ID
-    transitions.unshift({ id: generateTransitionId(), time: '00:00', temperature: 20 });
-  }
-
-  return {
-    transitions: sortTransitions(transitions)
-  };
 }
 
 /**
@@ -211,19 +141,17 @@ export function copyDaySchedule(source: DaySchedule): DaySchedule {
  * @returns Array with duplicates removed (new array, doesn't mutate original)
  */
 export function removeDuplicateTransitions(transitions: Transition[]): Transition[] {
-  const seen = new Set<string>();
+  const seen = new Map<string, number>();
   const result: Transition[] = [];
-
   for (const transition of transitions) {
-    if (!seen.has(transition.time)) {
-      seen.add(transition.time);
-      // Preserve ID, generate if missing
-      result.push({
-        id: transition.id || generateTransitionId(),
-        time: transition.time,
-        temperature: transition.temperature
-      });
+    if (seen.has(transition.time)) {
+      if (seen.get(transition.time) !== transition.temperature) {
+        throw new Error(`Conflicting temperatures at ${transition.time}`);
+      }
+      continue;
     }
+    seen.set(transition.time, transition.temperature);
+    result.push(ensureTransitionId({ ...transition }));
   }
 
   return result;
@@ -234,8 +162,7 @@ export function removeDuplicateTransitions(transitions: Transition[]): Transitio
  * Returns only the days that have changed
  *
  * Comparison uses serialized form (MQTT string) to handle equivalent representations,
- * so transitions in different order or with different IDs but same time/temp values
- * will be considered equal after sorting and serialization.
+ * so harmless padding and UI IDs do not count as changes. Order is validated.
  *
  * @param original - The original/reference schedule
  * @param modified - The modified schedule to compare
@@ -268,16 +195,16 @@ export function computeScheduleDiff(
 
 /**
  * Build the MQTT partial payload from a schedule diff
- * Creates an object with weekly_schedule_{day} keys for changed days only
+ * Creates an object with schedule_{day} keys for changed days only
  *
  * @param diff - The computed schedule differences
- * @returns Object with weekly_schedule_{day} keys for changed days only
+ * @returns Object with schedule_{day} keys for changed days only
  */
 export function buildPartialPayload(diff: ScheduleDiff): MQTTPartialPayload {
   const payload: MQTTPartialPayload = {};
 
   for (const [day, serialized] of diff.changes) {
-    payload[`weekly_schedule_${day}`] = serialized;
+    payload[`schedule_${day}`] = serialized;
   }
 
   return payload;

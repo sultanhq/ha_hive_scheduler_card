@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - feat/hive-slr1c-scheduler
   pull_request:
     branches:
       - main
@@ -34,8 +35,11 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Check committed build matches source
+        run: git diff --exit-code -- dist/hive-scheduler-card.js
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: trvzb-scheduler-card
-          path: dist/trvzb-scheduler-card.js
+          name: hive-scheduler-card
+          path: dist/hive-scheduler-card.js

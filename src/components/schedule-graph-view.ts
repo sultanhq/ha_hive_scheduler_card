@@ -1,14 +1,14 @@
 import { LitElement, html, css, svg } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { cardStyles, getTemperatureColor } from '../styles/card-styles.js';
-import { WeeklySchedule, DayOfWeek, Transition, DaySchedule } from '../models/types.js';
+import { WeeklySchedule, DayOfWeek, Transition, DaySchedule, DAYS_OF_WEEK } from '../models/types.js';
 import { sortTransitions, copyDaySchedule } from '../models/schedule.js';
 
 /**
  * Schedule Graph View Component
  * Displays an interactive temperature chart for the selected day with draggable points
  */
-@customElement('schedule-graph-view')
+@customElement('hive-schedule-graph-view')
 export class ScheduleGraphView extends LitElement {
   static styles = [
     cardStyles,
@@ -27,8 +27,8 @@ export class ScheduleGraphView extends LitElement {
       .day-selector {
         display: flex;
         gap: 6px;
-        justify-content: center;
-        flex-wrap: nowrap;
+        justify-content: flex-start;
+        flex-wrap: wrap;
         padding: 8px 0;
         overflow-x: auto;
         -webkit-overflow-scrolling: touch;
@@ -78,12 +78,13 @@ export class ScheduleGraphView extends LitElement {
         border: 1px solid var(--divider-color, #dddddd);
         border-radius: 8px;
         padding: 20px;
-        min-height: 350px;
+        min-height: 160px;
       }
 
       .chart-svg {
         width: 100%;
-        height: 350px;
+        height: auto;
+        aspect-ratio: 1000 / 400;
         user-select: none;
         touch-action: none;
         -webkit-user-select: none;
@@ -202,11 +203,11 @@ export class ScheduleGraphView extends LitElement {
 
         .chart-wrapper {
           padding: 12px;
-          min-height: 300px;
+          min-height: 160px;
         }
 
         .chart-svg {
-          height: 300px;
+          height: auto;
         }
       }
 
@@ -225,11 +226,11 @@ export class ScheduleGraphView extends LitElement {
 
         .chart-wrapper {
           padding: 8px;
-          min-height: 250px;
+          min-height: 160px;
         }
 
         .chart-svg {
-          height: 250px;
+          height: auto;
         }
       }
     `,
@@ -273,8 +274,8 @@ export class ScheduleGraphView extends LitElement {
   // Chart dimensions and layout constants
   private readonly CHART_PADDING = { top: 20, right: 20, bottom: 40, left: 50 };
   private readonly TEMP_PADDING = 5;
-  private readonly TEMP_ABSOLUTE_MIN = 4;
-  private readonly TEMP_ABSOLUTE_MAX = 35;
+  private readonly TEMP_ABSOLUTE_MIN = 1;
+  private readonly TEMP_ABSOLUTE_MAX = 32;
   private readonly HOUR_MIN = 0;
   private readonly HOUR_MAX = 24;
 
@@ -289,6 +290,9 @@ export class ScheduleGraphView extends LitElement {
     }
 
     const temps = daySchedule.transitions.map(t => t.temperature);
+    const previousDay = DAYS_OF_WEEK[(DAYS_OF_WEEK.indexOf(this.selectedDay) + 6) % 7];
+    const previous = this.schedule?.[previousDay]?.transitions.slice(-1)[0];
+    if (previous && daySchedule.transitions[0].time !== '00:00') temps.push(previous.temperature);
     const minTemp = Math.min(...temps);
     const maxTemp = Math.max(...temps);
 
@@ -344,7 +348,7 @@ export class ScheduleGraphView extends LitElement {
     const temp = min + normalized * (max - min);
 
     const rounded = Math.round(temp * 2) / 2;
-    return Math.max(this.TEMP_ABSOLUTE_MIN, Math.min(this.TEMP_ABSOLUTE_MAX, rounded));
+    return rounded < 3 ? 1 : Math.max(5, Math.min(32, rounded));
   }
 
   private timeToHours(time: string): number {
@@ -353,9 +357,8 @@ export class ScheduleGraphView extends LitElement {
   }
 
   private hoursToTime(hours: number): string {
-    const h = Math.floor(hours);
-    const m = Math.round((hours - h) * 60);
-    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+    const minutes = Math.max(0, Math.min(1439, Math.round(hours * 60)));
+    return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
   }
 
   private handlePointMouseDown(index: number, event: MouseEvent): void {
@@ -448,10 +451,10 @@ export class ScheduleGraphView extends LitElement {
 
     const transitions = [...daySchedule.transitions];
 
-    const isFirstPoint = this.draggingPoint === 0;
-    const newTime = isFirstPoint ? '00:00' : this.hoursToTime(Math.round(hours * 4) / 4);
+    const newTime = this.hoursToTime(Math.round(hours * 60) / 60);
 
     transitions[this.draggingPoint] = {
+      ...transitions[this.draggingPoint],
       time: newTime,
       temperature: temp,
     };
@@ -507,10 +510,10 @@ export class ScheduleGraphView extends LitElement {
 
     const transitions = [...daySchedule.transitions];
 
-    const isFirstPoint = this.draggingPoint === 0;
-    const newTime = isFirstPoint ? '00:00' : this.hoursToTime(Math.round(hours * 4) / 4);
+    const newTime = this.hoursToTime(Math.round(hours * 60) / 60);
 
     transitions[this.draggingPoint] = {
+      ...transitions[this.draggingPoint],
       time: newTime,
       temperature: temp,
     };
@@ -584,7 +587,7 @@ export class ScheduleGraphView extends LitElement {
       const midHours = (hours1 + hours2) / 2;
       defaultTime = this.hoursToTime(midHours);
 
-      defaultTemp = Math.round((sorted[maxGapIndex].temperature + sorted[maxGapIndex + 1].temperature) / 2);
+      defaultTemp = sorted[maxGapIndex].temperature;
     }
 
     const newTransition: Transition = {
@@ -719,6 +722,11 @@ export class ScheduleGraphView extends LitElement {
     }
 
     const pathParts: string[] = [];
+    const previousDay = DAYS_OF_WEEK[(DAYS_OF_WEEK.indexOf(this.selectedDay) + 6) % 7];
+    const previous = this.schedule?.[previousDay]?.transitions.slice(-1)[0];
+    const inferred = previous && transitions[0].time !== '00:00'
+      ? svg`<path class="inferred-line" stroke="var(--secondary-text-color, #777)" stroke-dasharray="5 4" fill="none" d=${`M ${this.hourToX(0, width)},${this.tempToY(previous.temperature, height)} L ${this.hourToX(this.timeToHours(transitions[0].time), width)},${this.tempToY(previous.temperature, height)}`}><title>Inferred from ${previousDay}; not a stored transition</title></path>`
+      : null;
 
     for (let i = 0; i < transitions.length; i++) {
       const t = transitions[i];
@@ -746,6 +754,7 @@ export class ScheduleGraphView extends LitElement {
     const pathData = pathParts.join(' ');
 
     return svg`
+      ${inferred}
       <path class="temperature-line" d="${pathData}" />
     `;
   }
@@ -757,13 +766,12 @@ export class ScheduleGraphView extends LitElement {
       const y = this.tempToY(transition.temperature, height);
       const color = getTemperatureColor(transition.temperature);
       const isDragging = this.draggingPoint === index;
-      const isTimeFixed = index === 0;
 
       return svg`
         <g
           class="point-group"
           data-point-index="${index}"
-          style="cursor: ${isTimeFixed ? 'ns-resize' : 'grab'};"
+          style="cursor: grab;"
         >
           <circle
             class="temperature-point ${isDragging ? 'dragging' : ''}"
@@ -787,9 +795,9 @@ export class ScheduleGraphView extends LitElement {
             x="${x}"
             y="${y + 20}"
             text-anchor="middle"
-            fill="${isTimeFixed ? 'var(--info-color, #2196F3)' : 'var(--secondary-text-color, #666666)'}"
+            fill="var(--secondary-text-color, #666666)"
           >
-            ${transition.time}${isTimeFixed ? ' (time fixed)' : ''}
+            ${transition.time}
           </text>
         </g>
       `;
@@ -968,8 +976,6 @@ export class ScheduleGraphView extends LitElement {
     const daySchedule = this.getCurrentDaySchedule();
     if (!daySchedule) return;
 
-    if (index === 0) return;
-
     if (daySchedule.transitions.length <= 1) return;
 
     const transitions = daySchedule.transitions.filter((_, i) => i !== index);
@@ -988,6 +994,6 @@ export class ScheduleGraphView extends LitElement {
 
 declare global {
   interface HTMLElementTagNameMap {
-    'schedule-graph-view': ScheduleGraphView;
+    'hive-schedule-graph-view': ScheduleGraphView;
   }
 }

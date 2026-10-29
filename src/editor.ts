@@ -1,32 +1,32 @@
 import { LitElement, html, TemplateResult } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { editorStyles } from './styles/card-styles';
-import type { HomeAssistant, TRVZBSchedulerCardConfig } from './models/types';
+import { DAYS_OF_WEEK, type DayOfWeek, type HomeAssistant, type HiveSchedulerCardConfig } from './models/types';
 
 /**
- * Configuration editor for TRVZB Scheduler Card
+ * Configuration editor for Hive Scheduler Card
  *
  * Provides a graphical interface for configuring the card:
  * - Entity picker (climate entities only)
  * - Name input (optional card title override)
  * - Default view mode selector (week/graph)
  */
-@customElement('trvzb-scheduler-card-editor')
-export class TRVZBSchedulerCardEditor extends LitElement {
+@customElement('hive-scheduler-card-editor')
+export class HiveSchedulerCardEditor extends LitElement {
   static styles = editorStyles;
 
   @property({ attribute: false }) public hass!: HomeAssistant;
-  @state() private _config!: TRVZBSchedulerCardConfig;
+  @state() private _config!: HiveSchedulerCardConfig;
   @state() private _entityPickerAvailable = true;
 
   /**
    * Set configuration
    * Called by Home Assistant when the card is configured
    */
-  public setConfig(config: TRVZBSchedulerCardConfig): void {
+  public setConfig(config: HiveSchedulerCardConfig): void {
     this._config = {
       ...config,
-      type: 'custom:trvzb-scheduler-card',
+      type: 'custom:hive-scheduler-card',
     };
   }
 
@@ -103,19 +103,16 @@ export class TRVZBSchedulerCardEditor extends LitElement {
   /**
    * Handle schedule sensor input change
    */
-  private _scheduleSensorChanged(e: Event): void {
-    const target = e.target as HTMLInputElement;
-    const value = target.value;
+  private _mqttChanged(e: Event): void {
+    this._config = { ...this._config, mqtt_device: (e.target as HTMLInputElement).value };
+    this._configChanged();
+  }
 
-    if (value === this._config.schedule_sensor) {
-      return;
-    }
-
-    this._config = {
-      ...this._config,
-      schedule_sensor: value || undefined,
-    };
-
+  private _scheduleEntityChanged(day: DayOfWeek, e: Event): void {
+    const entities = { ...this._config.schedule_entities };
+    const value = (e.target as HTMLInputElement).value;
+    if (value) entities[day] = value; else delete entities[day];
+    this._config = { ...this._config, schedule_entities: entities };
     this._configChanged();
   }
 
@@ -176,7 +173,7 @@ export class TRVZBSchedulerCardEditor extends LitElement {
           class="editor-input"
           .value=${this._config.entity || ''}
           @input=${this._entityChanged}
-          placeholder="climate.your_trvzb"
+          placeholder="climate.your_hive"
         />
         <div class="editor-description">
           No climate entities found. Enter the entity ID manually.
@@ -226,7 +223,7 @@ export class TRVZBSchedulerCardEditor extends LitElement {
           </label>
           ${this._renderEntityPicker()}
           <div class="editor-description">
-            Select the Sonoff TRVZB climate entity to manage
+            Select the Hive SLR1c climate entity to manage
           </div>
         </div>
 
@@ -266,23 +263,20 @@ export class TRVZBSchedulerCardEditor extends LitElement {
           </div>
         </div>
 
-        <!-- Schedule Sensor Override -->
         <div class="editor-row">
-          <label class="editor-label">
-            Schedule Sensor (optional)
-          </label>
-          <input
-            type="text"
-            class="editor-input"
-            .value=${this._config.schedule_sensor || ''}
-            @input=${this._scheduleSensorChanged}
-            placeholder="text.device_weekly_schedule"
-          />
-          <div class="editor-description">
-            Override the schedule text entity. By default, the card derives it from the
-            climate entity (e.g., climate.device → text.device_weekly_schedule).
-          </div>
+          <label class="editor-label">Zigbee2MQTT friendly name (required)</label>
+          <input class="editor-input" .value=${this._config.mqtt_device || ''} @input=${this._mqttChanged} placeholder="Hive Reciever" />
+          <div class="editor-description">Use the exact device name, including spaces.</div>
         </div>
+        <details>
+          <summary>Schedule entity overrides (optional)</summary>
+          <div class="editor-description">Automatically discovered on the climate device. Set overrides for renamed or ambiguous entities.</div>
+          ${DAYS_OF_WEEK.map(day => html`<div class="editor-row">
+            <label class="editor-label">${day}</label>
+            <input class="editor-input" .value=${this._config.schedule_entities?.[day] || ''}
+              @input=${(e: Event) => this._scheduleEntityChanged(day, e)} placeholder=${`text.hive_schedule_${day}`} />
+          </div>`)}
+        </details>
       </div>
     `;
   }
@@ -306,9 +300,9 @@ declare global {
 
 window.customCards = window.customCards || [];
 window.customCards.push({
-  type: 'custom:trvzb-scheduler-card',
-  name: 'TRVZB Scheduler Card',
-  description: 'Manage weekly heating schedules for Sonoff TRVZB thermostats',
+  type: 'hive-scheduler-card',
+  name: 'Hive Scheduler Card',
+  description: 'Manage weekly heating schedules for Hive SLR1c thermostats',
   preview: false,
-  documentationURL: 'https://github.com/abaddon/ha_sonoff_TRVZB_scheduler_card',
+  documentationURL: 'https://github.com/sultanhq/ha_hive_scheduler_card',
 });

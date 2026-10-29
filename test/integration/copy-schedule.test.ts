@@ -31,7 +31,7 @@ async function createDialog(
   sourceDay: DayOfWeek = 'monday',
   open = true
 ): Promise<CopyScheduleDialog> {
-  const dialog = document.createElement('copy-schedule-dialog') as CopyScheduleDialog;
+  const dialog = document.createElement('hive-copy-schedule-dialog') as CopyScheduleDialog;
   document.body.appendChild(dialog);
 
   dialog.sourceDay = sourceDay;

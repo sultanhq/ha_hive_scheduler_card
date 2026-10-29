@@ -71,27 +71,29 @@ describe('validation.ts', () => {
   });
 
   describe('isValidTemperature', () => {
+    it.each([1, 5, 5.5, 20, 20.5, 31.5, 32])('accepts Hive temperature %s', value => expect(isValidTemperature(value)).toBe(true));
+    it.each([NaN, Infinity, -Infinity, 0, 1.5, 4, 4.5, 20.25, 32.5])('rejects unsupported temperature %s', value => expect(isValidTemperature(value)).toBe(false));
     it('should accept valid temperatures in range', () => {
-      expect(isValidTemperature(4)).toBe(true);
+      expect(isValidTemperature(5)).toBe(true);
       expect(isValidTemperature(20)).toBe(true);
-      expect(isValidTemperature(35)).toBe(true);
+      expect(isValidTemperature(32)).toBe(true);
       expect(isValidTemperature(22.5)).toBe(true);
     });
 
     it('should accept 0.5 degree steps', () => {
-      expect(isValidTemperature(4.5)).toBe(true);
+      expect(isValidTemperature(5.5)).toBe(true);
       expect(isValidTemperature(5.0)).toBe(true);
       expect(isValidTemperature(5.5)).toBe(true);
       expect(isValidTemperature(20.5)).toBe(true);
-      expect(isValidTemperature(34.5)).toBe(true);
+      expect(isValidTemperature(31.5)).toBe(true);
     });
 
-    it('should accept minimum temperature (4°C)', () => {
-      expect(isValidTemperature(4)).toBe(true);
+    it('should accept minimum temperature (5°C)', () => {
+      expect(isValidTemperature(5)).toBe(true);
     });
 
-    it('should accept maximum temperature (35°C)', () => {
-      expect(isValidTemperature(35)).toBe(true);
+    it('should accept maximum temperature (32°C)', () => {
+      expect(isValidTemperature(32)).toBe(true);
     });
 
     it('should reject temperatures below minimum', () => {
@@ -162,8 +164,8 @@ describe('validation.ts', () => {
 
       expect(result.valid).toBe(false);
       expect(result.errors).toHaveLength(1);
-      expect(result.errors[0]).toContain('out of range');
-      expect(result.errors[0]).toContain('4-35');
+      expect(result.errors[0]).toContain('5–32°C');
+      expect(result.errors[0]).toContain('5–32°C');
     });
 
     it('should reject temperature out of range (too high)', () => {
@@ -172,7 +174,7 @@ describe('validation.ts', () => {
 
       expect(result.valid).toBe(false);
       expect(result.errors).toHaveLength(1);
-      expect(result.errors[0]).toContain('out of range');
+      expect(result.errors[0]).toContain('5–32°C');
     });
 
     it('should reject invalid temperature step', () => {
@@ -252,7 +254,7 @@ describe('validation.ts', () => {
       expect(result.errors.some(e => e.includes('Maximum is 6'))).toBe(true);
     });
 
-    it('should reject schedule without midnight transition', () => {
+    it('should accept schedules without a midnight transition', () => {
       const schedule: DaySchedule = {
         transitions: [
           { time: '06:00', temperature: 22 },
@@ -262,8 +264,8 @@ describe('validation.ts', () => {
 
       const result = validateDaySchedule(schedule);
 
-      expect(result.valid).toBe(false);
-      expect(result.errors.some(e => e.includes('First transition must be at 00:00'))).toBe(true);
+      expect(result.valid).toBe(true);
+      expect(result.errors).toEqual([]);
     });
 
     it('should reject duplicate times', () => {
@@ -278,7 +280,7 @@ describe('validation.ts', () => {
       const result = validateDaySchedule(schedule);
 
       expect(result.valid).toBe(false);
-      expect(result.errors.some(e => e.includes('Duplicate transition times'))).toBe(true);
+      expect(result.errors.some(e => e.includes('Conflicting'))).toBe(true);
     });
 
     it('should reject out-of-order times', () => {
@@ -440,7 +442,7 @@ describe('validation.ts', () => {
     it('should report errors for multiple invalid days', () => {
       const schedule: WeeklySchedule = {
         sunday: { transitions: [] },
-        monday: { transitions: [{ time: '06:00', temperature: 20 }] }, // No midnight
+        monday: { transitions: [{ time: '25:00', temperature: 20 }] }, // Invalid time
         tuesday: { transitions: [{ time: '00:00', temperature: 100 }] }, // Invalid temp
         wednesday: { transitions: [{ time: '00:00', temperature: 20 }] },
         thursday: { transitions: [{ time: '00:00', temperature: 20 }] },

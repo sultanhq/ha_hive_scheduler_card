@@ -5,7 +5,7 @@
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import '../../src/components/schedule-graph-view';
-import { createMockHass, createMockTRVZBEntity } from '../mocks/hass-mock';
+import { createMockHass, createMockHiveEntity } from '../mocks/hass-mock';
 import type { HomeAssistant, WeeklySchedule, DayOfWeek } from '../../src/models/types';
 
 /**
@@ -70,7 +70,7 @@ async function createGraphView(
   schedule?: WeeklySchedule | null,
   selectedDay: DayOfWeek = 'monday'
 ): Promise<ScheduleGraphView> {
-  const element = document.createElement('schedule-graph-view') as ScheduleGraphView;
+  const element = document.createElement('hive-schedule-graph-view') as ScheduleGraphView;
   document.body.appendChild(element);
 
   element.schedule = schedule ?? createMockSchedule();
@@ -630,7 +630,7 @@ describe('ScheduleGraphView - Integration Tests', () => {
       expect(pointGroups.length).toBe(5);
     });
 
-    it('should show time as fixed for midnight transition', async () => {
+    it('should leave the first stored transition time editable', async () => {
       const element = await createGraphView();
       const pointLabels = querySelectorAll(element, '.point-label');
 
@@ -640,7 +640,7 @@ describe('ScheduleGraphView - Integration Tests', () => {
       );
 
       // First transition (00:00) should have time fixed label
-      expect(fixedTimeLabels.length).toBe(1);
+      expect(fixedTimeLabels.length).toBe(0);
     });
   });
 });

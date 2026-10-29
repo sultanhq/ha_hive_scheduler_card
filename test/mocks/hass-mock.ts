@@ -7,7 +7,7 @@ import type {
 } from '../../src/models/types';
 
 /**
- * Sample day schedule string in TRVZB format
+ * Sample day schedule string in Hive SLR1c format
  * Format: "HH:mm/temp HH:mm/temp ..."
  */
 export const SAMPLE_DAY_SCHEDULE_STRING = "00:00/18 06:00/21 08:00/19 17:00/22 22:00/18";
@@ -15,7 +15,7 @@ export const SAMPLE_DAY_SCHEDULE_STRING = "00:00/18 06:00/21 08:00/19 17:00/22 2
 /**
  * Sample entity ID for testing
  */
-export const SAMPLE_ENTITY_ID = "climate.living_room_trvzb";
+export const SAMPLE_ENTITY_ID = "climate.living_room_hive";
 
 /**
  * Sample weekly schedule in MQTT format (string-based)
@@ -201,24 +201,51 @@ export interface MockHassOptions {
 export function createMockHass(options: MockHassOptions = {}): HomeAssistant {
   const recorder = options.recorder || new MockServiceCallRecorder();
 
-  return {
+  const listeners = new Map<string, Set<(message: any) => void>>();
+  const pending: Record<string, string> = {};
+  const hass: HomeAssistant = {
     states: options.states || {},
-    callService: async (domain: string, service: string, data: Record<string, unknown> = {}) => {
-      recorder.record(domain, service, data);
-      return Promise.resolve();
+    user: { is_admin: true },
+    callWS: async <T>() => Object.keys(hass.states).map(id => ({
+      entity_id: id, device_id: 'hive-device', platform: 'mqtt',
+      unique_id: id.startsWith('text.') ? `0x123_${id.match(/schedule_(sunday|monday|tuesday|wednesday|thursday|friday|saturday)$/)?.[0] || id}` : id
+    })) as T,
+    connection: {
+      subscribeMessage: async (callback: any, message: Record<string, unknown>) => {
+        const topic = String(message.topic);
+        if (!listeners.has(topic)) listeners.set(topic, new Set());
+        listeners.get(topic)!.add(callback);
+        return () => { listeners.get(topic)?.delete(callback); };
+      }
     },
+    callService: async (domain, service, data = {}) => {
+      recorder.record(domain, service, data);
+      const topic = String(data.topic || '');
+      if (topic.endsWith('/set')) Object.assign(pending, JSON.parse(String(data.payload)));
+      if (topic.endsWith('/get')) {
+        for (const key of Object.keys(JSON.parse(String(data.payload)))) {
+          if (!(key in pending)) continue;
+          for (const [id, entity] of Object.entries(hass.states)) {
+            if (id.startsWith('text.') && id.endsWith(`_${key}`)) entity.state = pending[key];
+          }
+        }
+        const stateTopic = topic.slice(0, -4);
+        for (const callback of listeners.get(stateTopic) || []) callback({ topic: stateTopic, payload: JSON.stringify(pending), retain: false });
+      }
+    }
   };
+  return hass;
 }
 
 /**
- * Create a mock TRVZB climate entity
+ * Create a mock Hive SLR1c climate entity
  *
  * @param friendlyName - The friendly name for the entity (will be used to create entity_id)
  * @param schedule - Optional weekly schedule (uses sample schedule if not provided)
  * @returns Mock HassEntity
  */
-export function createMockTRVZBEntity(
-  friendlyName: string = "living_room_trvzb",
+export function createMockHiveEntity(
+  friendlyName: string = "living_room_hive",
   schedule?: MQTTWeeklySchedule | WeeklySchedule
 ): HassEntity {
   const entityId = `climate.${friendlyName}`;
@@ -261,7 +288,7 @@ export function createMockTRVZBEntity(
  * @returns Mock HassEntity for the text entity
  */
 export function createMockScheduleSensor(
-  friendlyName: string = "living_room_trvzb",
+  friendlyName: string = "living_room_hive",
   schedule?: MQTTWeeklySchedule
 ): HassEntity {
   const sensorEntityId = `text.${friendlyName}_weekly_schedule`;
@@ -279,14 +306,14 @@ export function createMockScheduleSensor(
 
 /**
  * Create mock day-specific text entities for the new entity structure
- * Creates 7 text entities: text.{name}_weekly_schedule_{day}
+ * Creates 7 text entities: text.{name}_schedule_{day}
  *
  * @param friendlyName - The base name for the entity
  * @param schedule - Optional weekly schedule (uses sample schedule if not provided)
  * @returns Record of text entity IDs to HassEntity objects
  */
 export function createMockDaySensors(
-  friendlyName: string = "living_room_trvzb",
+  friendlyName: string = "living_room_hive",
   schedule?: MQTTWeeklySchedule
 ): Record<string, HassEntity> {
   const scheduleData = schedule || SAMPLE_WEEKLY_SCHEDULE;
@@ -297,7 +324,7 @@ export function createMockDaySensors(
   const sensors: Record<string, HassEntity> = {};
 
   for (const day of days) {
-    const sensorEntityId = `text.${friendlyName}_weekly_schedule_${day}`;
+    const sensorEntityId = `text.${friendlyName}_schedule_${day}`;
     const dayScheduleString = scheduleData[day];
 
     sensors[sensorEntityId] = {
@@ -402,7 +429,7 @@ export function createMockClimateEntityWithoutSchedule(
  * Create a mock entity with invalid schedule data (for testing error handling)
  */
 export function createMockEntityWithInvalidSchedule(
-  friendlyName: string = "invalid_trvzb"
+  friendlyName: string = "invalid_hive"
 ): HassEntity {
   return {
     entity_id: `climate.${friendlyName}`,
@@ -464,11 +491,11 @@ export interface TestScenario {
 }
 
 export function createTestScenario(
-  entityName: string = "living_room_trvzb",
+  entityName: string = "living_room_hive",
   schedule?: MQTTWeeklySchedule
 ): TestScenario {
   const recorder = new MockServiceCallRecorder();
-  const entity = createMockTRVZBEntity(entityName, schedule);
+  const entity = createMockHiveEntity(entityName, schedule);
   const sensorEntity = createMockScheduleSensor(entityName, schedule); // Deprecated but kept for compatibility
   const daySensors = createMockDaySensors(entityName, schedule);
 

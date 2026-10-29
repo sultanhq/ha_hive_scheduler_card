@@ -1,13 +1,13 @@
 /**
- * TRVZB Scheduler Card - Entry Point
+ * Hive Scheduler Card - Entry Point
  *
- * This file imports and registers all custom elements for the TRVZB Scheduler Card.
+ * This file imports and registers all custom elements for the Hive Scheduler Card.
  * Components automatically register themselves via the @customElement decorator.
  */
 
 // Import main card and editor (these also import their dependencies)
-import { TRVZBSchedulerCard } from './card';
-import { TRVZBSchedulerCardEditor } from './editor';
+import { HiveSchedulerCard } from './card';
+import { HiveSchedulerCardEditor } from './editor';
 
 // Import all child components (auto-register via @customElement decorator)
 import './components/schedule-week-view';
@@ -19,4 +19,4 @@ import './components/copy-schedule-dialog';
 
 
 // Export main card class for potential external use
-export { TRVZBSchedulerCard, TRVZBSchedulerCardEditor };
+export { HiveSchedulerCard, HiveSchedulerCardEditor };

@@ -9,7 +9,7 @@ import { cardStyles } from '../styles/card-styles';
  * A modal dialog that allows users to copy a day's schedule to other days.
  * Includes quick selection buttons for weekdays, weekend, and all days.
  */
-@customElement('copy-schedule-dialog')
+@customElement('hive-copy-schedule-dialog')
 export class CopyScheduleDialog extends LitElement {
   @property({ type: String })
   sourceDay: DayOfWeek = 'monday';
@@ -334,6 +334,6 @@ export class CopyScheduleDialog extends LitElement {
 
 declare global {
   interface HTMLElementTagNameMap {
-    'copy-schedule-dialog': CopyScheduleDialog;
+    'hive-copy-schedule-dialog': CopyScheduleDialog;
   }
 }

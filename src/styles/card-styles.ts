@@ -2,12 +2,12 @@ import { css } from 'lit';
 
 /**
  * Temperature color gradient function
- * Maps temperature from 4°C (blue) to 35°C (red)
+ * Maps temperature from 1°C off (blue) to 32°C (red)
  * with a smooth transition through green at ~20°C
  */
 export function getTemperatureColor(temp: number): string {
   // Clamp temperature to valid range
-  const clampedTemp = Math.max(4, Math.min(35, temp));
+  const clampedTemp = Math.max(1, Math.min(32, temp));
 
   // Normalize temperature to 0-1 range
   const normalized = Math.max(0, Math.min(1, (clampedTemp - 14) / (22 - 14)));
@@ -15,13 +15,13 @@ export function getTemperatureColor(temp: number): string {
   let r: number, g: number, b: number;
 
   if (normalized < 0.5) {
-    // Blue (4°C) to Green (19.5°C)
+    // Blue (1°C) to Green (19.5°C)
     const t = normalized * 2; // 0-1 for first half
     r = Math.round(0 + (100 - 0) * t);
     g = Math.round(150 + (200 - 150) * t);
     b = Math.round(255 + (50 - 255) * t);
   } else {
-    // Green (19.5°C) to Red (35°C)
+    // Green (19.5°C) to Red (32°C)
     const t = (normalized - 0.5) * 2; // 0-1 for second half
     r = Math.round(100 + (255 - 100) * t);
     g = Math.round(200 + (80 - 200) * t);
@@ -42,6 +42,8 @@ export const cardStyles = css`
 
   /* Card Container */
   ha-card {
+    display: block;
+    box-sizing: border-box;
     padding: 16px;
     border-radius: var(--ha-card-border-radius, 12px);
     background: var(--card-background-color);
@@ -53,6 +55,8 @@ export const cardStyles = css`
     display: flex;
     align-items: center;
     justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
     margin-bottom: 12px;
     padding-bottom: 8px;
     border-bottom: 1px solid var(--divider-color);

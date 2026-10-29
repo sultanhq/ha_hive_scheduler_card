@@ -10,7 +10,7 @@ import { WeeklySchedule, DayOfWeek } from '../models/types.js';
  * Shows 7 columns (Sunday through Saturday) with transition blocks
  * representing time ranges and temperatures.
  */
-@customElement('schedule-week-view')
+@customElement('hive-schedule-week-view')
 export class ScheduleWeekView extends LitElement {
   @property({ type: Object }) schedule?: WeeklySchedule;
   @property({ type: Boolean }) disabled = false;
@@ -20,6 +20,15 @@ export class ScheduleWeekView extends LitElement {
     css`
       :host {
         display: block;
+        container-type: inline-size;
+      }
+
+      @container (max-width: 600px) {
+        .week-view { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      }
+
+      @container (min-width: 601px) and (max-width: 800px) {
+        .week-view { grid-template-columns: repeat(4, minmax(0, 1fr)); }
       }
 
       .week-container {
@@ -191,6 +200,6 @@ export class ScheduleWeekView extends LitElement {
 
 declare global {
   interface HTMLElementTagNameMap {
-    'schedule-week-view': ScheduleWeekView;
+    'hive-schedule-week-view': ScheduleWeekView;
   }
 }

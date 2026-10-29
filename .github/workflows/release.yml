@@ -24,6 +24,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Type check
+        run: npx tsc --noEmit
+
       - name: Run tests
         run: npm test
 
@@ -37,9 +40,8 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          files: |
-            dist/trvzb-scheduler-card.js
-            dist/trvzb-scheduler-card.js.map
+          draft: true
+          files: dist/hive-scheduler-card.js
           generate_release_notes: true
           name: v${{ steps.get_version.outputs.VERSION }}
         env:
