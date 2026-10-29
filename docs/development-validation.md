@@ -56,3 +56,19 @@ Validation with the new lockfile:
 - The rebuilt JavaScript passed a jsdom smoke check: seven native day schedules, two graph points, matching timetable/graph colours and minute labels, without hardware writes.
 
 The two remaining low findings are the build-only `@rollup/plugin-node-resolve` → `deepmerge` advisory [GHSA-gcqx-w48m-w2h4](https://github.com/advisories/GHSA-gcqx-w48m-w2h4). The current `deepmerge` release (4.3.1) has no patched version. npm proposes downgrading the resolver to 7.1.3, which is outside the supported Rollup 4 plugin line; that downgrade was not applied. No force install, dependency override or audit suppression was added.
+
+## Boost review follow-up — 29 October 2026
+
+The boost PR adds a second card in the same JavaScript resource. Two review findings were reproduced and fixed: cached/retained display state cannot supply command confirmation fields, and receiver mode must match the requested `heat` or `auto` mode. Pending verification is abandoned on reconfiguration.
+
+- Nine new regression cases failed against the original implementation and pass with the fixes.
+- All 463 tests pass across 13 files; `npm ci`, TypeScript and the build pass.
+- Repeated builds exit normally and reproduce the same JavaScript hash.
+- The compiled local preview passes start/confirm, cancellation, simulated expiry, retained plus room-only feedback rejection, fresh read-back and wrong-mode rejection checks. Weekly schedules stay unchanged.
+- The local preview includes desktop and mobile Boost cards, with feedback controls and manual mock minute advancement. Both layouts were inspected in Chrome; a mock boost and verified cancellation were exercised through the browser. It has no Home Assistant connection or hardware writes.
+
+The original scheduler’s hardware acceptance remains complete. Boost start, cancellation, real receiver expiry and physical remote behaviour still require their own hardware acceptance; local mocks do not establish those results.
+
+New Boost commands now require 15–360 whole minutes, including configured defaults and custom input. The receiver’s remaining countdown may fall below 15 minutes and is still displayed and verified normally. The active status reads “Boost active”, and the preview defaults to 15 minutes.
+
+The Boost suggestion now starts at room temperature +1°C, rounds upward to a half-degree step, and clamps to 5–32°C. Live HA and MQTT room updates refresh an untouched suggestion; unchanged HA values do not overwrite a newer MQTT reading. Slider edits and confirmation/pending commands retain their selected target. Missing or invalid room readings use the configured fallback. Added coverage includes source updates, boundaries, unavailable readings, manual edits and confirmation stability; a compiled-preview smoke check verifies the suggested and published temperatures.

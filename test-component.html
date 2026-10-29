@@ -3,31 +3,97 @@
 <title>Hive Scheduler Card — mock receiver preview</title>
 <style>
 body { margin:24px; background:#f3f5f6; color:#263238; font:16px system-ui; --primary-color:#087f8c; --primary-text-color:#263238; --secondary-text-color:#59676d; --card-background-color:#fff; --divider-color:#dce2e5; }
-main { max-width:1050px; margin:auto; } ha-card { display:block; background:white; border-radius:12px; box-shadow:0 1px 5px #0002; } .mobile { width:360px; max-width:100%; margin-top:24px; } pre { white-space:pre-wrap; font-size:13px; } h1 {font-size:24px;} button { padding:10px; }
+main { max-width:1050px; margin:auto; } ha-card { display:block; background:white; border-radius:12px; box-shadow:0 1px 5px #0002; } .mobile { width:360px; max-width:100%; margin-top:24px; } pre { white-space:pre-wrap; font-size:13px; } h1 {font-size:24px;} button, select { padding:10px; } .mock-controls { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:16px 0; } .boost-preview { max-width:600px; }
 </style></head><body><main>
 <h1>Hive Scheduler Card — mock receiver</h1><p>Local preview only. No Home Assistant connection or hardware writes.</p>
 <button id="mobile">Toggle narrow preview</button><button id="viewer">Toggle administrator/viewer</button>
-<section id="cards"><hive-scheduler-card id="week"></hive-scheduler-card><div class="mobile"><hive-scheduler-card id="graph"></hive-scheduler-card></div></section>
+<div class="mock-controls">
+<label>Boost feedback <select id="feedback"><option value="normal">Normal confirmation</option><option value="retained">Retained only</option><option value="mismatch">Wrong system mode</option><option value="silent">No feedback</option></select></label>
+<button id="room">Send room temperature only</button><button id="read">Read mock receiver</button><button id="advance">Advance mock by 1 minute</button>
+</div>
+<section id="cards"><hive-scheduler-card id="week"></hive-scheduler-card><div class="mobile"><hive-scheduler-card id="graph"></hive-scheduler-card></div><h2>Boost · desktop</h2><div class="boost-preview"><hive-boost-card id="boost-desktop"></hive-boost-card></div><h2>Boost · mobile</h2><div class="mobile"><hive-boost-card id="boost-mobile"></hive-boost-card></div></section>
 <pre id="messages" aria-live="polite"></pre>
 </main><script type="module">
 import './dist/hive-scheduler-card.js';
-const days=['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
-const entities=Object.fromEntries(days.map(day=>[day,`text.renamed_${day}`]));
-const cards=[document.querySelector('#week'),document.querySelector('#graph')];
-const states={ 'climate.hive_example':{entity_id:'climate.hive_example',state:'auto',attributes:{friendly_name:'Hive Heating'}} };
-for(const day of days)states[entities[day]]={entity_id:entities[day],state:'06:07/20.5 19:31/1 19:31/1 19:31/1 19:31/1 19:31/1',attributes:{}};
-const listeners=new Map();let staged={};
-let hass={ states,user:{is_admin:true}, connection:{subscribeMessage:async(callback,{topic})=>{ if(!listeners.has(topic))listeners.set(topic,new Set()); listeners.get(topic).add(callback); return ()=>listeners.get(topic).delete(callback); }},
-callService:async(domain,service,{topic,payload})=>{
- document.querySelector('#messages').textContent=`${topic}\n${payload}`;
- if(topic.endsWith('/set'))staged={...staged,...JSON.parse(payload)};
- if(topic.endsWith('/get'))setTimeout(()=>{
-  const response={};for(const key of Object.keys(JSON.parse(payload))){const day=key.slice(9);if(staged[key])states[entities[day]]={...states[entities[day]],state:staged[key],last_updated:new Date().toISOString()};response[key]=states[entities[day]].state;}
-  hass={...hass,states:{...states}};for(const card of cards)card.hass=hass;
-  for(const callback of listeners.get('zigbee2mqtt/Hive Reciever')||[])callback({topic:'zigbee2mqtt/Hive Reciever',payload:JSON.stringify(response),retain:false});
- },350);
-}};
-for(const [i,card] of cards.entries()){card.setConfig({type:'custom:hive-scheduler-card',entity:'climate.hive_example',mqtt_device:'Hive Reciever',name:i?'Hive Heating · narrow graph':'Hive Heating · week',view_mode:i?'graph':'week',schedule_entities:entities});card.hass=hass;}
-document.querySelector('#mobile').onclick=()=>document.querySelector('#cards').classList.toggle('mobile');
-document.querySelector('#viewer').onclick=()=>{hass={...hass,user:{is_admin:!hass.user.is_admin}};for(const card of cards)card.hass=hass;};
+const days = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
+const entities = Object.fromEntries(days.map(day => [day, `text.renamed_${day}`]));
+const schedulerCards = [...document.querySelectorAll('hive-scheduler-card')];
+const boostCards = [...document.querySelectorAll('hive-boost-card')];
+const cards = [...schedulerCards, ...boostCards];
+const topic = 'zigbee2mqtt/Hive Reciever';
+const states = { 'climate.hive_example': { entity_id:'climate.hive_example', state:'auto', attributes:{friendly_name:'Hive Heating', current_temperature:20.5, temperature:20.5} } };
+for (const day of days) states[entities[day]] = {entity_id:entities[day], state:'06:07/20.5 19:31/1 19:31/1 19:31/1 19:31/1 19:31/1', attributes:{}};
+const receiver = {system_mode:'auto', occupied_heating_setpoint:20.5, temperature_setpoint_hold:false, temperature_setpoint_hold_duration:0, local_temperature:20.5};
+const listeners = new Map();
+let staged = {};
+let lastCommand = 'No commands sent.';
+function log() {
+  document.querySelector('#messages').textContent = `${lastCommand}\n\nMock receiver (no hardware):\n${JSON.stringify(receiver, null, 2)}`;
+}
+function updateCards() {
+  states['climate.hive_example'] = {...states['climate.hive_example'], state:receiver.system_mode, attributes:{...states['climate.hive_example'].attributes, current_temperature:receiver.local_temperature, temperature:receiver.occupied_heating_setpoint}};
+  hass = {...hass, states:{...states}};
+  for (const card of cards) card.hass = hass;
+  log();
+}
+function emit(data, boostFeedback = false) {
+  const mode = document.querySelector('#feedback').value;
+  if (boostFeedback && mode === 'silent') return;
+  updateCards();
+  for (const callback of listeners.get(topic) || []) callback({topic, payload:JSON.stringify(data), retain:boostFeedback && mode === 'retained'});
+}
+let hass = {
+  states, user:{is_admin:true},
+  connection:{subscribeMessage:async (callback, {topic: subscribedTopic}) => {
+    if (!listeners.has(subscribedTopic)) listeners.set(subscribedTopic, new Set());
+    listeners.get(subscribedTopic).add(callback);
+    return () => listeners.get(subscribedTopic).delete(callback);
+  }},
+  callService:async (domain, service, {topic: commandTopic, payload, retain}) => {
+    if (domain !== 'mqtt' || service !== 'publish' || retain) throw new Error('Unexpected service in local mock');
+    lastCommand = `${commandTopic}\n${payload}`;
+    const data = JSON.parse(payload);
+    if (commandTopic === `${topic}/set`) {
+      staged = {...staged, ...Object.fromEntries(Object.entries(data).filter(([key]) => key.startsWith('schedule_')))};
+      const boostFields = Object.fromEntries(Object.entries(data).filter(([key]) => Object.hasOwn(receiver, key)));
+      if (Object.keys(boostFields).length) {
+        Object.assign(receiver, boostFields);
+        if (document.querySelector('#feedback').value === 'mismatch') receiver.system_mode = data.system_mode === 'heat' ? 'auto' : 'heat';
+        setTimeout(() => emit({...receiver}, true), 350);
+      }
+    }
+    if (commandTopic === `${topic}/get`) setTimeout(() => {
+      const response = {};
+      let hasBoost = false;
+      for (const key of Object.keys(data)) {
+        if (key.startsWith('schedule_')) {
+          const entity = entities[key.slice(9)];
+          if (!entity) continue;
+          if (staged[key]) states[entity] = {...states[entity], state:staged[key], last_updated:new Date().toISOString()};
+          response[key] = states[entity].state;
+        } else if (Object.hasOwn(receiver, key)) {
+          response[key] = receiver[key];
+          hasBoost = true;
+        }
+      }
+      emit(response, hasBoost);
+    }, 350);
+    log();
+  }
+};
+for (const [i, card] of schedulerCards.entries()) card.setConfig({type:'custom:hive-scheduler-card', entity:'climate.hive_example', mqtt_device:'Hive Reciever', name:i?'Hive Heating · narrow graph':'Hive Heating · week', view_mode:i?'graph':'week', schedule_entities:entities});
+for (const [i, card] of boostCards.entries()) card.setConfig({type:'custom:hive-boost-card', entity:'climate.hive_example', mqtt_device:'Hive Reciever', name:i?'Hive Boost · mobile':'Hive Boost · desktop', default_temperature:21, default_duration:15});
+for (const card of cards) card.hass = hass;
+document.querySelector('#mobile').onclick = () => document.querySelector('#cards').classList.toggle('mobile');
+document.querySelector('#viewer').onclick = () => {hass = {...hass, user:{is_admin:!hass.user.is_admin}}; for (const card of cards) card.hass = hass;};
+document.querySelector('#room').onclick = () => {receiver.local_temperature = Math.round((receiver.local_temperature + 0.1) * 10) / 10; emit({local_temperature:receiver.local_temperature});};
+document.querySelector('#read').onclick = () => emit({...receiver}, true);
+document.querySelector('#advance').onclick = () => {
+  if (receiver.temperature_setpoint_hold && receiver.temperature_setpoint_hold_duration > 0) {
+    receiver.temperature_setpoint_hold_duration--;
+    if (receiver.temperature_setpoint_hold_duration === 0) {receiver.temperature_setpoint_hold = false; receiver.system_mode = 'auto';}
+  }
+  emit({...receiver}, true);
+};
+log();
 </script></body></html>

@@ -122,3 +122,74 @@ Tag-triggered release automation creates **draft releases only**. Optional inher
 See [development validation](docs/development-validation.md) for baseline results, dependency findings, and hardware status.
 
 For inclusion in HACS’s default catalogue, see the [submission guide](docs/hacs-submission.md). Custom-repository installation already works; default inclusion also requires a published GitHub release and a PR to `hacs/default`.
+
+
+## Hive Boost Card (second HACS dashboard card)
+
+The HACS installation includes **two separate Lovelace card types** in the same
+`hive-scheduler-card.js` resource:
+
+- `custom:hive-scheduler-card`: edit the native seven-day timetable.
+- `custom:hive-boost-card`: temporarily override the heating setpoint.
+
+After updating the HACS dashboard package, reload the Home Assistant frontend
+and select **Hive Boost Card** in the Add Card dialog. Use the visual editor to
+choose your climate entity and the exact Zigbee2MQTT receiver friendly name.
+The boost card does **not** require the seven schedule text entities.
+
+```yaml
+type: custom:hive-boost-card
+entity: climate.hive_reciever  # select the actual climate entity
+mqtt_device: "Hive Reciever"  # exact Zigbee2MQTT friendly name
+name: Heating Boost
+default_temperature: 21      # fallback only when room temperature is unavailable
+default_duration: 60
+```
+
+### Controls and safety
+
+1. The suggested temperature is **room temperature +1°C**, rounded up to the next **0.5°C** step and limited to **5–32°C**. You can adjust it with the slider. The suggestion follows room readings until you adjust it or open confirmation; your selected/confirmed value then stays stable. If the room temperature is unavailable, `default_temperature` is used as a fallback (21°C if unset).
+2. Select **15, 30, 60, 90, 120, 180 or 360 minutes**, or enter a custom
+   whole-minute duration from 15–360.
+3. Select **Boost**, review the proposed temperature and duration, then
+   **Confirm Boost**. Cancel/Back performs no write.
+4. The card sends **one unretained MQTT message** to
+   `zigbee2mqtt/<FRIENDLY_NAME>/set` containing the four receiver fields:
+   ```json
+   {"system_mode":"heat","occupied_heating_setpoint":21,"temperature_setpoint_hold_duration":60,"temperature_setpoint_hold":true}
+   ```
+5. The card waits for non-retained receiver feedback to report that the hold
+   and setpoint agree with the request. A publish acknowledgment alone
+   is **not** displayed as success.
+6. While a hold is active, **Cancel Boost** sends
+   ```json
+   {"system_mode":"auto","temperature_setpoint_hold_duration":0,"temperature_setpoint_hold":false}
+   ```
+   to release the hold and return to automatic scheduling.
+
+The Boost card never changes `schedule_monday` through `schedule_sunday`.
+The finite hold duration is stored in the receiver, not a browser countdown.
+An existing manual/indefinite hold is shown as such rather than mislabelled as
+a timed boost. The sentinel **65535 is never used for a new Boost**.
+
+Like schedule editing, receiver control needs a Home Assistant administrator
+and a working MQTT integration. The Boost card also needs live Zigbee2MQTT
+state messages to verify a change. A failure to receive feedback is reported
+as **unconfirmed**, rather than encouraging repeated automatic writes.
+
+**Hardware acceptance:** The original scheduler has been hardware-tested.
+The Boost card's new set/stop behaviour requires separate acceptance testing
+on the actual Hive SLR1c + SLT3C setup, particularly the automatic return
+to timetable when the duration expires. Start with a 15-minute boost and
+verify the remote display, receiver feedback, expiry, and manual cancellation
+before relying on it for unattended heating. The SLR1c exposes only
+`off`, `auto` and `heat` system modes, unlike some older Hive variants
+which document `emergency_heating`.
+
+### Local Boost preview
+
+Run `npm ci` and `npm run build`, then serve the checkout with `python3 -m http.server 8124 --bind 127.0.0.1`. Open [the mock preview](http://127.0.0.1:8124/test-component.html#boost-desktop) and scroll to the desktop/mobile Boost cards. This page has no Home Assistant connection and never writes hardware.
+
+The preview defaults to a 15-minute boost. Select **Boost**, review and **Confirm Boost**, then try **Cancel Boost**. **Advance mock by 1 minute** tests receiver expiry without waiting in real time. The **Boost feedback** selector simulates retained-only feedback, wrong system mode, or no feedback; **Send room temperature only** demonstrates that unrelated updates cannot confirm a command. Switch back to normal feedback and use **Read mock receiver** for a fresh response.
+
+Verification requires fresh non-retained command fields: hold, finite duration, setpoint and `heat` mode for a start; cleared hold, zero duration and `auto` mode for cancellation. Cached display data cannot confirm either operation.

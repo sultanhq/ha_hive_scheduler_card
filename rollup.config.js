@@ -39,5 +39,16 @@ export default {
         drop_console: false
       }
     })
+    ,{
+      // Keep both custom card types in the ONE HACS dashboard resource.
+      // Append after minification: the self-contained Boost component is loaded
+      // with hive-scheduler-card.js without affecting the existing scheduler.
+      name: 'append-hive-boost',
+      generateBundle(_options, bundle) {
+        const output = bundle['hive-scheduler-card.js'];
+        if (!output || output.type !== 'chunk') throw new Error('HACS bundle missing');
+        output.code += '\n' + readFileSync(new URL('./src/boost-card.js', import.meta.url), 'utf8');
+      }
+    }
   ].filter(Boolean)
 };
