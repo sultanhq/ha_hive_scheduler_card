@@ -4,7 +4,7 @@ import '../../src/boost-card.js';
 type MqttMessage = { topic: string; payload: string; retain: boolean };
 type Call = { domain: string; service: string; data: Record<string, unknown> };
 
-async function mount(admin = true) {
+async function mount(admin = true, currentTemperature: unknown = 20) {
   const calls: Call[] = [];
   const listeners = new Set<(message: MqttMessage) => void>();
   const hass = {
@@ -15,7 +15,7 @@ async function mount(admin = true) {
         state: 'heat',
         attributes: {
           friendly_name: 'Hive Heating',
-          current_temperature: 20.5,
+          current_temperature: currentTemperature,
           temperature: 21,
         },
       },
@@ -73,6 +73,75 @@ describe('Hive Boost Card in same HACS resource', () => {
     expect(customElements.get('hive-boost-card')).toBeDefined();
     expect(customElements.get('hive-boost-card-editor')).toBeDefined();
     expect(cards.some((card: { type: string }) => card.type === 'hive-boost-card')).toBe(true);
+  });
+
+  it.each([[20,21],[20.5,21.5],[20.1,21.5],[20.6,22],[31,32],[31.5,32],[33,32],[0,5]])(
+    'suggests a valid boost above room temperature %s°C (%s°C)', async (current, expected) => {
+      const { card } = await mount(true, current);
+      expect(card.shadowRoot.querySelector('#temperature').value).toBe(String(expected));
+      expect(card.shadowRoot.textContent).toContain(`Room temperature: ${current.toFixed(1)}°C`);
+    });
+
+  it.each([undefined, null, 'unknown', '', false, Infinity])('uses the configured fallback for unavailable room temperature %s', async current => {
+    const { card, hass } = await mount();
+    hass.states['climate.hive_reciever'].attributes.current_temperature = current;
+    card.hass = {...hass};
+    card.setConfig({entity:'climate.hive_reciever',mqtt_device:'Hive Reciever',default_temperature:23});
+    expect(card.shadowRoot.querySelector('#temperature').value).toBe('23');
+    expect(card.shadowRoot.textContent).toContain('Room temperature unavailable');
+  });
+
+  it('uses room +1°C rather than the configured fallback when a room reading is available', async () => {
+    const { card } = await mount(true, 20.5);
+    card.setConfig({entity:'climate.hive_reciever',mqtt_device:'Hive Reciever',default_temperature:30});
+    expect(card.shadowRoot.querySelector('#temperature').value).toBe('21.5');
+  });
+
+  it('updates an untouched suggestion from fresh HA or MQTT room readings', async () => {
+    const { card, hass, emit } = await mount();
+    hass.states['climate.hive_reciever'].attributes.current_temperature = 20.5;
+    card.hass = {...hass};
+    expect(card.shadowRoot.querySelector('#temperature').value).toBe('21.5');
+    emit({local_temperature:18}, true);
+    expect(card.shadowRoot.querySelector('#temperature').value).toBe('21.5');
+    emit({local_temperature:22.1});
+    expect(card.shadowRoot.querySelector('#temperature').value).toBe('23.5');
+    emit({local_temperature:17}, true);
+    expect(card.shadowRoot.querySelector('#temperature').value).toBe('23.5');
+    card.hass = {...hass};
+    expect(card.shadowRoot.querySelector('#temperature').value).toBe('23.5');
+    hass.states['climate.hive_reciever'].attributes.current_temperature = 23;
+    card.hass = {...hass};
+    expect(card.shadowRoot.querySelector('#temperature').value).toBe('24');
+  });
+
+  it('preserves a manually selected temperature when room readings change', async () => {
+    const { card, hass, emit } = await mount();
+    const slider = card.shadowRoot.querySelector('#temperature');
+    slider.value = '25'; slider.dispatchEvent(new Event('input'));
+    emit({local_temperature:22});
+    hass.states['climate.hive_reciever'].attributes.current_temperature = 24;
+    card.hass = {...hass};
+    expect(card.shadowRoot.querySelector('#temperature').value).toBe('25');
+  });
+
+  it('keeps the reviewed temperature stable through confirmation and publishing', async () => {
+    const { card, click, emit, writes, flush } = await mount();
+    click('#boost'); emit({local_temperature:24});
+    expect(card.shadowRoot.querySelector('#summary').textContent).toContain('21.0°C');
+    click('#confirm'); await flush();
+    expect(JSON.parse(String(writes()[0].data.payload)).occupied_heating_setpoint).toBe(21);
+    emit({temperature_setpoint_hold:true,temperature_setpoint_hold_duration:60,occupied_heating_setpoint:21,system_mode:'heat'});
+    expect(card.shadowRoot.textContent).toContain('Boost confirmed by receiver');
+  });
+
+  it('resets manual selection and room source on reconfiguration', async () => {
+    const { card, hass } = await mount();
+    const slider = card.shadowRoot.querySelector('#temperature');
+    slider.value = '25'; slider.dispatchEvent(new Event('input'));
+    hass.states['climate.hive_reciever'].attributes.current_temperature = 21.5;
+    card.setConfig({entity:'climate.hive_reciever',mqtt_device:'Hive Reciever'});
+    expect(card.shadowRoot.querySelector('#temperature').value).toBe('22.5');
   });
 
   it('requires explicit confirmation before any MQTT write', async () => {

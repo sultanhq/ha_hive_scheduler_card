@@ -142,13 +142,13 @@ type: custom:hive-boost-card
 entity: climate.hive_reciever  # select the actual climate entity
 mqtt_device: "Hive Reciever"  # exact Zigbee2MQTT friendly name
 name: Heating Boost
-default_temperature: 21
+default_temperature: 21      # fallback only when room temperature is unavailable
 default_duration: 60
 ```
 
 ### Controls and safety
 
-1. Select a temperature from **5–32°C**, in **0.5°C** steps.
+1. The suggested temperature is **room temperature +1°C**, rounded up to the next **0.5°C** step and limited to **5–32°C**. You can adjust it with the slider. The suggestion follows room readings until you adjust it or open confirmation; your selected/confirmed value then stays stable. If the room temperature is unavailable, `default_temperature` is used as a fallback (21°C if unset).
 2. Select **15, 30, 60, 90, 120, 180 or 360 minutes**, or enter a custom
    whole-minute duration from 15–360.
 3. Select **Boost**, review the proposed temperature and duration, then

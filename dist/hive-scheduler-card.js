@@ -2309,6 +2309,11 @@ const Wt=2;let Gt=class{constructor(t){}get _$AU(){return this._$AM._$AU}_$AT(t,
   const validDuration = (n) => Number.isInteger(n) && n >= MIN_DURATION && n <= MAX_DURATION;
   const validDevice = (n) => typeof n === 'string' && n.trim().length > 0 && n.length <= 256 && !/[+/#\x00-\x1f\x7f]/.test(n);
   const validEntity = (n) => typeof n === 'string' && /^climate\.[a-z0-9_]+$/.test(n);
+  const parseRoomTemperature = value => {
+    if (typeof value !== 'number' && (typeof value !== 'string' || !value.trim())) return null;
+    const temperature = Number(value);
+    return Number.isFinite(temperature) ? temperature : null;
+  };
   const holdEnabled = (v) => v === true || v === 1 || v === 'true' || v === '1';
   const holdDisabled = (v) => v === false || v === 0 || v === 'false' || v === '0';
   const styles = `
@@ -2344,6 +2349,9 @@ const Wt=2;let Gt=class{constructor(t){}get _$AU(){return this._$AM._$AU}_$AT(t,
       this._config = null;
       this._hass = null;
       this._temp = 21;
+      this._roomTemp = null;
+      this._lastClimateTemp = null;
+      this._temperatureEdited = false;
       this._duration = 60;
       this._data = null;
       this._confirm = false;
@@ -2360,6 +2368,7 @@ const Wt=2;let Gt=class{constructor(t){}get _$AU(){return this._$AM._$AU}_$AT(t,
     }
     set hass(hass) {
       this._hass = hass;
+      this._syncClimateTemperature();
       this._ensureSubscription();
       this._render();
     }
@@ -2375,11 +2384,23 @@ const Wt=2;let Gt=class{constructor(t){}get _$AU(){return this._$AM._$AU}_$AT(t,
       this._temp = config.default_temperature === undefined ? 21 : Number(config.default_temperature);
       this._duration = config.default_duration === undefined ? 60 : Number(config.default_duration);
       this._data = null;
+      this._roomTemp = null;
+      this._lastClimateTemp = null;
+      this._temperatureEdited = false;
+      this._syncClimateTemperature();
       this._confirm = false;
       this._status = '';
       this._error = '';
       this._ensureSubscription();
       this._render();
+    }
+    _syncClimateTemperature() {
+      const temperature = parseRoomTemperature(this._hass?.states?.[this._config?.entity]?.attributes?.current_temperature);
+      // Unchanged HA state must not overwrite a newer MQTT room reading.
+      if (temperature !== this._lastClimateTemp || this._roomTemp === null) {
+        this._lastClimateTemp = temperature;
+        this._roomTemp = temperature ?? parseRoomTemperature(this._data?.local_temperature);
+      }
     }
     static getConfigElement() { return document.createElement('hive-boost-card-editor'); }
     static getStubConfig() { return { entity:'', mqtt_device:'' }; }
@@ -2444,6 +2465,10 @@ const Wt=2;let Gt=class{constructor(t){}get _$AU(){return this._$AM._$AU}_$AT(t,
       if (!update || typeof update !== 'object' || Array.isArray(update)) return;
       const keys = ['occupied_heating_setpoint','temperature_setpoint_hold','temperature_setpoint_hold_duration','system_mode','local_temperature'];
       if (!keys.some(key => Object.prototype.hasOwnProperty.call(update,key))) return;
+      if (Object.prototype.hasOwnProperty.call(update,'local_temperature') && (!message.retain || this._roomTemp === null)) {
+        this._roomTemp = parseRoomTemperature(update.local_temperature)
+          ?? parseRoomTemperature(this._hass?.states?.[this._config?.entity]?.attributes?.current_temperature);
+      }
       this._data = { ...(this._data || {}), ...Object.fromEntries(keys.filter(key => Object.prototype.hasOwnProperty.call(update,key)).map(key => [key,update[key]])) };
       if (this._pending && !message.retain) {
         // Display state may include cached/retained values. Verification belongs
@@ -2527,6 +2552,11 @@ const Wt=2;let Gt=class{constructor(t){}get _$AU(){return this._$AM._$AU}_$AT(t,
     }
     _render() {
       if (!this.shadowRoot) return;
+      if (this._config && !this._temperatureEdited && !this._confirm && !this._working) {
+        this._temp = this._roomTemp === null
+          ? (this._config.default_temperature === undefined ? 21 : Number(this._config.default_temperature))
+          : Math.min(MAX_TEMP, Math.max(MIN_TEMP, Math.ceil((this._roomTemp + 1) * 2) / 2));
+      }
       const root = this.shadowRoot;
       const climate = this._hass?.states?.[this._config?.entity];
       const enabled = !!this._config && !!climate && !['unknown','unavailable'].includes(climate.state)
@@ -2535,7 +2565,7 @@ const Wt=2;let Gt=class{constructor(t){}get _$AU(){return this._$AM._$AU}_$AT(t,
         ? holdEnabled(this._data.temperature_setpoint_hold) : null;
       const reportedDuration = Number(this._data?.temperature_setpoint_hold_duration);
       const finite = hold && Number.isInteger(reportedDuration) && reportedDuration > 0 && reportedDuration <= MAX_DURATION;
-      const current = Number(this._data?.local_temperature ?? climate?.attributes?.current_temperature);
+      const current = this._roomTemp;
       const title = this._config?.name || climate?.attributes?.friendly_name || 'Hive Boost';
       root.innerHTML = `
         <style>${styles}</style>
@@ -2566,6 +2596,7 @@ const Wt=2;let Gt=class{constructor(t){}get _$AU(){return this._$AM._$AU}_$AT(t,
           <label for="temperature">Boost temperature</label>
           <div class="value" id="temperature-value"></div>
           <input id="temperature" type="range" min="5" max="32" step="0.5" aria-label="Boost temperature">
+          <div class="small" id="temperature-hint"></div>
           <label for="duration">Boost duration</label>
           <div class="presets" id="presets"></div>
           <div class="small">Or enter minutes (15–360)</div>
@@ -2578,8 +2609,15 @@ const Wt=2;let Gt=class{constructor(t){}get _$AU(){return this._$AM._$AU}_$AT(t,
         body.querySelector('#temperature-value').textContent = `${this._temp.toFixed(1)}°C`;
         const input = body.querySelector('#temperature');
         input.value = String(this._temp);
+        const hint = body.querySelector('#temperature-hint');
+        hint.hidden = this._temperatureEdited;
+        hint.textContent = this._roomTemp === null
+          ? 'Room temperature unavailable; using the fallback temperature.'
+          : 'Suggested: room temperature +1°C, rounded up to 0.5°C (maximum 32°C).';
         input.addEventListener('input',event => {
           this._temp = Number(event.target.value);
+          this._temperatureEdited = true;
+          hint.hidden = true;
           body.querySelector('#temperature-value').textContent = `${this._temp.toFixed(1)}°C`;
         });
         const duration = body.querySelector('#duration');
@@ -2653,7 +2691,7 @@ const Wt=2;let Gt=class{constructor(t){}get _$AU(){return this._$AM._$AU}_$AT(t,
       <label for="mqtt">Zigbee2MQTT friendly name</label><input id="mqtt" placeholder="Hive Reciever">
       <small>Use the exact receiver name, including spaces and spelling.</small>
       <label for="name">Card title (optional)</label><input id="name" placeholder="Hive Boost">
-      <label for="temp">Default temperature (5–32°C)</label><input id="temp" type="number" step=".5" min="5" max="32">
+      <label for="temp">Fallback temperature when room temperature is unavailable (5–32°C)</label><input id="temp" type="number" step=".5" min="5" max="32">
       <label for="duration">Default duration in minutes (15–360)</label><input id="duration" type="number" min="${MIN_DURATION}" max="360">`;
       const entities = Object.keys(this._hass?.states || {}).filter(id=>id.startsWith('climate.'));
       const select = root.querySelector('#entity');
