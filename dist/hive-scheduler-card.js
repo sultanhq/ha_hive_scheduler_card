@@ -1110,23 +1110,24 @@ const ht=t=>(e,i)=>{void 0!==i?i.addInitializer(()=>{customElements.define(t,e)}
         >
           ${t}°C
         </text>
-      `)}return i}renderTemperatureLine(t,e,i){if(0===t.length)return null;const r=[],s=this.getCarryOver(),o=s?`M ${this.hourToX(0,e)},${this.tempToY(s.temperature,i)} L ${this.hourToX(this.timeToHours(s.until),e)},${this.tempToY(s.temperature,i)} L ${this.hourToX(this.timeToHours(s.until),e)},${this.tempToY(t[0].temperature,i)}`:"",n=s?`00:00–${s.until}: ${1===s.temperature?"Heating off (1°C)":`${s.temperature}°C`} · carried over from ${s.day.charAt(0).toUpperCase()+s.day.slice(1)}. Display only; not a stored transition.`:"",a=s?W`
-          <path class="inferred-line" stroke="var(--secondary-text-color, #666666)"
-            stroke-width="1.25" stroke-dasharray="4 4" vector-effect="non-scaling-stroke" fill="none" d=${o}>
-            <title>${n}</title>
+      `)}return i}renderTemperatureLine(t,e,i){if(0===t.length)return null;const r=this.getCarryOver(),s=r?`M ${this.hourToX(0,e)},${this.tempToY(r.temperature,i)} L ${this.hourToX(this.timeToHours(r.until),e)},${this.tempToY(r.temperature,i)} L ${this.hourToX(this.timeToHours(r.until),e)},${this.tempToY(t[0].temperature,i)}`:"",o=r?`00:00–${r.until}: ${1===r.temperature?"Heating off (1°C)":`${r.temperature}°C`} · carried over from ${r.day.charAt(0).toUpperCase()+r.day.slice(1)}. Display only; not a stored transition.`:"",n=r?W`
+          <path class="inferred-line" stroke=${zt(r.temperature)}
+            stroke-width="1.25" stroke-dasharray="4 4" vector-effect="non-scaling-stroke" fill="none" d=${s}>
+            <title>${o}</title>
           </path>
           <path class="inferred-hover-target" stroke="transparent" stroke-width="14"
-            vector-effect="non-scaling-stroke" pointer-events="stroke" fill="none" d=${o}>
-            <title>${n}</title>
+            vector-effect="non-scaling-stroke" pointer-events="stroke" fill="none" d=${s}>
+            <title>${o}</title>
           </path>
-          <circle class="inferred-start" cx=${this.hourToX(0,e)} cy=${this.tempToY(s.temperature,i)}
-            r="5" fill="var(--card-background-color, #ffffff)" stroke="var(--secondary-text-color, #666666)"
+          <circle class="inferred-start" cx=${this.hourToX(0,e)} cy=${this.tempToY(r.temperature,i)}
+            r="5" fill="var(--card-background-color, #ffffff)" stroke=${zt(r.temperature)}
             stroke-width="2" vector-effect="non-scaling-stroke">
-            <title>${n}</title>
+            <title>${o}</title>
           </circle>
-        `:null;for(let s=0;s<t.length;s++){const o=t[s],n=this.timeToHours(o.time),a=this.hourToX(n,e),d=this.tempToY(o.temperature,i);let l;if(0===s?r.push(`M ${a},${d}`):r.push(`L ${a},${d}`),s<t.length-1){const i=this.timeToHours(t[s+1].time);l=this.hourToX(i,e)}else l=this.hourToX(24,e);r.push(`L ${l},${d}`)}const d=r.join(" ");return W`
+        `:null,a=t.map((r,s)=>{const o=this.hourToX(this.timeToHours(r.time),e),n=this.tempToY(r.temperature,i),a=s>0?this.tempToY(t[s-1].temperature,i):n,d=this.hourToX(s+1<t.length?this.timeToHours(t[s+1].time):24,e);return W`<path class="temperature-line" stroke=${zt(r.temperature)}
+        d=${`M ${o},${a} L ${o},${n} L ${d},${n}`} />`});return W`
+      ${n}
       ${a}
-      <path class="temperature-line" d="${d}" />
     `}renderTemperaturePoints(t,e,i){return t.map((t,r)=>{const s=this.timeToHours(t.time),o=this.hourToX(s,e),n=this.tempToY(t.temperature,i),a=zt(t.temperature),d=this.draggingPoint===r;return W`
         <g
           class="point-group"
@@ -1308,7 +1309,6 @@ const ht=t=>(e,i)=>{void 0!==i?i.addInitializer(()=>{customElements.define(t,e)}
 
       .temperature-line {
         fill: none;
-        stroke: var(--primary-color, #00bcd4);
         stroke-width: 2;
         stroke-linejoin: round;
       }

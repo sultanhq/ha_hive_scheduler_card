@@ -62,6 +62,31 @@ describe('Hive UI regressions', () => {
     expect(graph.schedule.monday.transitions).toHaveLength(1); expect(card).toBeTruthy();
   });
 
+  it('matches each graph period to its temperature point colour for hot, mild and off settings', async () => {
+    const { root } = await mount('graph');
+    const graph = root.querySelector('hive-schedule-graph-view') as any;
+    graph.schedule = { ...graph.schedule, monday: { transitions: [
+      { time: '06:07', temperature: 32 }, { time: '12:00', temperature: 18 }, { time: '19:31', temperature: 1 }
+    ] } };
+    await tick(graph);
+    const segments = [...graph.shadowRoot.querySelectorAll('.temperature-line')] as SVGPathElement[];
+    const points = [...graph.shadowRoot.querySelectorAll('.temperature-point')] as SVGCircleElement[];
+    expect(segments).toHaveLength(3);
+    expect(segments.map(segment => segment.getAttribute('stroke'))).toEqual(points.map(point => point.getAttribute('fill')));
+    expect(new Set(segments.map(segment => segment.getAttribute('stroke'))).size).toBe(3);
+  });
+
+  it('uses the off point colour for the carried-over off period and its open start marker', async () => {
+    const { root } = await mount('graph');
+    const graph = root.querySelector('hive-schedule-graph-view') as any;
+    await tick(graph);
+    const offColour = graph.shadowRoot.querySelectorAll('.temperature-point')[1].getAttribute('fill');
+    expect(graph.shadowRoot.querySelector('.inferred-line').getAttribute('stroke')).toBe(offColour);
+    expect(graph.shadowRoot.querySelector('.inferred-start').getAttribute('stroke')).toBe(offColour);
+    expect(graph.shadowRoot.querySelector('.inferred-hover-target').getAttribute('stroke')).toBe('transparent');
+    expect(graph.shadowRoot.querySelector('.carry-over-note')).toBeNull();
+  });
+
   it.each([1, 12, 32])('provides Sunday’s final %s°C setting on hover at the start of Monday', async temperature => {
     const { root } = await mount('graph');
     const graph = root.querySelector('hive-schedule-graph-view') as any;

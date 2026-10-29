@@ -67,7 +67,7 @@ Overrides may be partial; discovery resolves the remainder. Each day needs a dif
 
 ## Editing and verified saving
 
-Click a day to edit transitions, or drag stored graph points. The first transition is editable and deletable; retain at least one transition. Choose **Heating off (1°C)** for an off period. Use **Copy to Other Days** to copy a day's schedule.
+Click a day to edit transitions, or drag stored graph points. The first transition is editable and deletable; retain at least one transition. Choose **Heating off (1°C)** for an off period. Graph lines use the same temperature colours as their points and the timetable, including the dashed overnight period. Use **Copy to Other Days** to copy a day's schedule.
 
 Schedules may begin after midnight. A dashed graph segment before the first transition shows the previous day's final temperature, including weekly wraparound. Hover over this segment or its open start marker to see the temperature, time interval, and previous day—for example, “00:00–06:00: Heating off (1°C), carried over from Sunday”. It has no editable point and is never written. Identical duplicate padding is collapsed; different transition times with equal temperatures remain distinct.
 

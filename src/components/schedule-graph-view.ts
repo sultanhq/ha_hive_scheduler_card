@@ -112,7 +112,6 @@ export class ScheduleGraphView extends LitElement {
 
       .temperature-line {
         fill: none;
-        stroke: var(--primary-color, #00bcd4);
         stroke-width: 2;
         stroke-linejoin: round;
       }
@@ -729,7 +728,6 @@ export class ScheduleGraphView extends LitElement {
       return null;
     }
 
-    const pathParts: string[] = [];
     const carryOver = this.getCarryOver();
     const inferredPath = carryOver
       ? `M ${this.hourToX(0, width)},${this.tempToY(carryOver.temperature, height)} L ${this.hourToX(this.timeToHours(carryOver.until), width)},${this.tempToY(carryOver.temperature, height)} L ${this.hourToX(this.timeToHours(carryOver.until), width)},${this.tempToY(transitions[0].temperature, height)}`
@@ -739,7 +737,7 @@ export class ScheduleGraphView extends LitElement {
       : '';
     const inferred = carryOver
       ? svg`
-          <path class="inferred-line" stroke="var(--secondary-text-color, #666666)"
+          <path class="inferred-line" stroke=${getTemperatureColor(carryOver.temperature)}
             stroke-width="1.25" stroke-dasharray="4 4" vector-effect="non-scaling-stroke" fill="none" d=${inferredPath}>
             <title>${inferredDescription}</title>
           </path>
@@ -748,41 +746,25 @@ export class ScheduleGraphView extends LitElement {
             <title>${inferredDescription}</title>
           </path>
           <circle class="inferred-start" cx=${this.hourToX(0, width)} cy=${this.tempToY(carryOver.temperature, height)}
-            r="5" fill="var(--card-background-color, #ffffff)" stroke="var(--secondary-text-color, #666666)"
+            r="5" fill="var(--card-background-color, #ffffff)" stroke=${getTemperatureColor(carryOver.temperature)}
             stroke-width="2" vector-effect="non-scaling-stroke">
             <title>${inferredDescription}</title>
           </circle>
         `
       : null;
 
-    for (let i = 0; i < transitions.length; i++) {
-      const t = transitions[i];
-      const hours = this.timeToHours(t.time);
-      const x = this.hourToX(hours, width);
-      const y = this.tempToY(t.temperature, height);
-
-      if (i === 0) {
-        pathParts.push(`M ${x},${y}`);
-      } else {
-        pathParts.push(`L ${x},${y}`);
-      }
-
-      let nextX: number;
-      if (i < transitions.length - 1) {
-        const nextHours = this.timeToHours(transitions[i + 1].time);
-        nextX = this.hourToX(nextHours, width);
-      } else {
-        nextX = this.hourToX(24, width);
-      }
-
-      pathParts.push(`L ${nextX},${y}`);
-    }
-
-    const pathData = pathParts.join(' ');
+    const segments = transitions.map((transition, index) => {
+      const x = this.hourToX(this.timeToHours(transition.time), width);
+      const y = this.tempToY(transition.temperature, height);
+      const previousY = index > 0 ? this.tempToY(transitions[index - 1].temperature, height) : y;
+      const nextX = this.hourToX(index + 1 < transitions.length ? this.timeToHours(transitions[index + 1].time) : 24, width);
+      return svg`<path class="temperature-line" stroke=${getTemperatureColor(transition.temperature)}
+        d=${`M ${x},${previousY} L ${x},${y} L ${nextX},${y}`} />`;
+    });
 
     return svg`
       ${inferred}
-      <path class="temperature-line" d="${pathData}" />
+      ${segments}
     `;
   }
 

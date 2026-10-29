@@ -21,7 +21,7 @@ The card's complete read/edit/write/read-back and physical-remote acceptance rem
 ## Hive implementation validation
 
 - `npm ci`: completed with the existing lockfile dependency versions.
-- `npm test`: 419 tests passed across 12 files.
+- `npm test`: 421 tests passed across 12 files.
 - `npm run typecheck`: passed.
 - `npm run build`: exits zero; two production builds produce the same JavaScript hash.
 - The 110 KB bundle includes the full original MIT notice. Licence comments survive minification.
@@ -34,3 +34,5 @@ Hardware acceptance remains pending. Installation and the backup/edit/read-back/
 ## Start-of-day graph follow-up
 
 The carried-over temperature appears in a hover tooltip, without a persistent legend, and is drawn with a non-scaling dashed line and a non-editable start marker. The inferred period includes the rise/fall to the first native transition. Tests cover previous-day off/heating values, weekly wraparound, explicit midnight transitions, absent previous-day data, and a verified save with no synthetic midnight payload. The 1°C tooltip content and line were inspected in the narrow Chrome mock preview.
+
+Graph periods and the inferred overnight period use the same temperature palette as their points and timetable entries. Rendering tests cover hot, mild, and off settings while keeping the overnight hover details and thin dashes.
