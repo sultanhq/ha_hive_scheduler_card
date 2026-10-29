@@ -65,23 +65,26 @@ describe('Hive UI regressions', () => {
     expect(graph.schedule.monday.transitions).toHaveLength(1); expect(card).toBeTruthy();
   });
 
-  it('matches each graph period to its temperature point colour for hot, mild and off settings', async () => {
+  it('matches each graph period to its temperature point colour across the blue, green and red temperature bands', async () => {
     const { root } = await mount('graph');
     const graph = root.querySelector('hive-schedule-graph-view') as any;
     graph.schedule = { ...graph.schedule, monday: { transitions: [
       { time: '06:07', temperature: 25.5 }, { time: '08:00', temperature: 20 },
-      { time: '10:00', temperature: 20.5 }, { time: '12:00', temperature: 25 },
-      { time: '16:00', temperature: 19 }, { time: '19:31', temperature: 1 }
+      { time: '10:00', temperature: 25 }, { time: '12:00', temperature: 15 },
+      { time: '16:00', temperature: 10 }, { time: '19:31', temperature: 9.5 }
     ] } };
     await tick(graph);
     const segments = [...graph.shadowRoot.querySelectorAll('.temperature-line')] as SVGPathElement[];
     const points = [...graph.shadowRoot.querySelectorAll('.temperature-point')] as SVGCircleElement[];
     expect(segments).toHaveLength(6);
     expect(segments.map(segment => segment.getAttribute('stroke'))).toEqual(points.map(point => point.getAttribute('fill')));
-    expect(new Set(segments.map(segment => segment.getAttribute('stroke'))).size).toBe(6);
+    expect(new Set(segments.map(segment => segment.getAttribute('stroke'))).size).toBe(5);
     expect(points[0].getAttribute('fill')).toBe('rgb(255, 0, 0)');
-    expect(points[3].getAttribute('fill')).not.toBe('rgb(255, 0, 0)');
-    for (const point of points.slice(0, 4)) {
+    expect(points[2].getAttribute('fill')).not.toBe('rgb(255, 0, 0)');
+    expect(points[3].getAttribute('fill')).toBe('rgb(46, 184, 92)');
+    expect(points[4].getAttribute('fill')).toBe(points[3].getAttribute('fill'));
+    expect(points[5].getAttribute('fill')).toBe('rgb(0, 150, 255)');
+    for (const point of points.slice(0, 3)) {
       const [red, green, blue] = point.getAttribute('fill')!.match(/\d+/g)!.map(Number);
       expect(red).toBeGreaterThan(green * 2);
       expect(red).toBeGreaterThan(blue * 2);

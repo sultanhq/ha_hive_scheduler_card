@@ -1,23 +1,30 @@
 import { css, unsafeCSS } from 'lit';
 
-/**
- * Shared temperature palette: cool blue through green up to 19°C,
- * then near-red up to 25°C and pure red above 25°C.
- */
+// Warm colours pass through yellow to avoid a muddy green/red blend.
+const warmTemperatureStops = [
+  [15, 46, 184, 92],
+  [17, 240, 190, 40],
+  [20, 239, 83, 80],
+  [25, 255, 24, 24],
+] as const;
+
+/** Shared palette: blue below 10°C, green at 10–15°C, then warmer towards red. */
 export function getTemperatureColor(temp: number): string {
   const clampedTemp = Math.max(1, Math.min(32, temp));
+  if (clampedTemp < 10) return 'rgb(0, 150, 255)';
+  if (clampedTemp <= 15) return 'rgb(46, 184, 92)';
   if (clampedTemp > 25) return 'rgb(255, 0, 0)';
-  if (clampedTemp > 19) {
-    const t = (clampedTemp - 19) / (25 - 19);
-    return `rgb(${Math.round(239 + 12 * t)}, ${Math.round(83 - 30 * t)}, ${Math.round(80 - 27 * t)})`;
-  }
 
-  const t = Math.max(0, (clampedTemp - 14) / (19 - 14));
-  return `rgb(${Math.round(100 * t)}, ${Math.round(150 + 50 * t)}, ${Math.round(255 - 205 * t)})`;
+  const upperIndex = warmTemperatureStops.findIndex(stop => clampedTemp <= stop[0]);
+  const lower = warmTemperatureStops[upperIndex - 1];
+  const upper = warmTemperatureStops[upperIndex];
+  const t = (clampedTemp - lower[0]) / (upper[0] - lower[0]);
+  const channels = [1, 2, 3].map(channel => Math.round(lower[channel] + (upper[channel] - lower[channel]) * t));
+  return `rgb(${channels.join(', ')})`;
 }
 
 // Position palette stops on the heating slider’s actual 5–32°C scale.
-const temperatureSliderGradient = `linear-gradient(to right, ${[5, 14, 19, 19.5, 25, 25.5, 32]
+const temperatureSliderGradient = `linear-gradient(to right, ${[5, 9.5, 10, 15, 17, 20, 25, 25.5, 32]
   .map(temp => `${getTemperatureColor(temp)} ${((temp - 5) / 27) * 100}%`).join(', ')})`;
 
 /**
