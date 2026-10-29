@@ -53,17 +53,17 @@ export function validateTransition(transition: Transition): ValidationResult {
 export function validateDaySchedule(schedule: DaySchedule): ValidationResult {
   const errors: string[] = [];
   const transitions = schedule?.transitions;
-  if (!Array.isArray(transitions)) return { valid: false, errors: ['Missing schedule points'] };
+  if (!Array.isArray(transitions)) return { valid: false, errors: ['Missing setpoints'] };
 
   // Check minimum transitions
   if (transitions.length === 0) {
-    errors.push('Day schedule must have at least 1 schedule point');
+    errors.push('Day schedule must have at least 1 setpoint');
     return { valid: false, errors };
   }
 
   // Check maximum transitions
   if (transitions.length > 6) {
-    errors.push(`Too many schedule points: ${transitions.length}. Maximum is 6 per day`);
+    errors.push(`Too many setpoints: ${transitions.length}. Maximum is 6 per day`);
   }
 
   // Validate each transition
@@ -71,7 +71,7 @@ export function validateDaySchedule(schedule: DaySchedule): ValidationResult {
     const result = validateTransition(transition);
     if (!result.valid) {
       result.errors.forEach(error => {
-        errors.push(`Schedule point ${index + 1}: ${error}`);
+        errors.push(`Setpoint ${index + 1}: ${error}`);
       });
     }
   });
@@ -94,7 +94,7 @@ export function validateDaySchedule(schedule: DaySchedule): ValidationResult {
       errors.push(`Conflicting temperatures at ${currTime}`);
     }
     if (currMinutes < prevMinutes) {
-      errors.push(`Schedule points must be in chronological order: ${prevTime} should come before ${currTime}`);
+      errors.push(`Setpoints must be in chronological order: ${prevTime} should come before ${currTime}`);
     }
   }
 

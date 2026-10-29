@@ -231,7 +231,7 @@ describe('validation.ts', () => {
 
       expect(result.valid).toBe(false);
       expect(result.errors).toHaveLength(1);
-      expect(result.errors[0]).toContain('at least 1 schedule point');
+      expect(result.errors[0]).toContain('at least 1 setpoint');
     });
 
     it('should reject too many transitions (>6)', () => {
@@ -250,7 +250,7 @@ describe('validation.ts', () => {
       const result = validateDaySchedule(schedule);
 
       expect(result.valid).toBe(false);
-      expect(result.errors.some(e => e.includes('Too many schedule points'))).toBe(true);
+      expect(result.errors.some(e => e.includes('Too many setpoints'))).toBe(true);
       expect(result.errors.some(e => e.includes('Maximum is 6'))).toBe(true);
     });
 
@@ -325,7 +325,7 @@ describe('validation.ts', () => {
       const result = validateDaySchedule(schedule);
 
       expect(result.valid).toBe(false);
-      expect(result.errors.some(e => e.includes('Schedule point 2'))).toBe(true);
+      expect(result.errors.some(e => e.includes('Setpoint 2'))).toBe(true);
     });
 
     it('should validate transitions with invalid time format', () => {
@@ -339,7 +339,7 @@ describe('validation.ts', () => {
       const result = validateDaySchedule(schedule);
 
       expect(result.valid).toBe(false);
-      expect(result.errors.some(e => e.includes('Schedule point 2') && e.includes('Invalid time format'))).toBe(true);
+      expect(result.errors.some(e => e.includes('Setpoint 2') && e.includes('Invalid time format'))).toBe(true);
     });
 
     it('should report multiple validation errors', () => {

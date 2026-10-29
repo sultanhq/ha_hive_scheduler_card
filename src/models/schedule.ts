@@ -43,7 +43,7 @@ export function parseDaySchedule(scheduleString: string): DaySchedule {
   }
   const transitions = scheduleString.trim().split(/\s+/).map(part => {
     const match = /^(\d{2}:\d{2})\/(\d+(?:\.\d{1,2})?)$/.exec(part);
-    if (!match) throw new Error(`Malformed schedule point: ${part}. Expected HH:mm/temperature.`);
+    if (!match) throw new Error(`Malformed setpoint: ${part}. Expected HH:mm/temperature.`);
     return { id: generateTransitionId(), time: match[1], temperature: Number(match[2]) };
   });
   const result = validateDaySchedule({ transitions });

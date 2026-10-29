@@ -11,7 +11,7 @@ Derived from [abaddon's Sonoff TRVZB Scheduler Card](https://github.com/abaddon/
 - Hive SLR1c with the working external converter exposing seven writable text properties, `schedule_monday` through `schedule_sunday`, `/get` support, and receiver-originated schedule responses. It must not optimistically publish requested schedules as confirmed state. The converter is not bundled or modified by this card.
 - Zigbee2MQTT Home Assistant discovery and Home Assistant's MQTT integration, using base topic `zigbee2mqtt`.
 - Home Assistant 2024.1 or newer. Viewing requires entity access. **Verified saving requires a Home Assistant administrator**, because HA's MQTT listener requires administrator permissions.
-- Temperatures: **1°C off**, or **5–32°C in 0.5°C steps**. One to six chronological schedule points per day, with every minute supported.
+- Temperatures: **1°C off**, or **5–32°C in 0.5°C steps**. One to six chronological setpoints per day, with every minute supported.
 
 The owner has hardware-tested the converter. The card's complete end-to-end hardware acceptance remains pending owner confirmation. No production release has been published for this implementation.
 
@@ -67,9 +67,9 @@ Overrides may be partial; discovery resolves the remainder. Each day needs a dif
 
 ## Editing and verified saving
 
-Click a day to edit schedule points, or drag stored graph points. Each schedule point sets a temperature from a particular time. The first point is editable and deletable; retain at least one point. Choose **Heating off (1°C)** for an off period. Graph lines use the same temperature colours as their points and the timetable, including the dashed overnight period. Temperatures above 19°C use red shades; cooler settings use green and blue. Labels sit beside graph steps, with a background outline to keep crossing lines clear of the text. Use **Copy to Other Days** to copy a day's schedule.
+Click a day to edit setpoints, or drag stored graph points. Each setpoint sets a temperature from a particular time. The first point is editable and deletable; retain at least one point. Choose **Heating off (1°C)** for an off period. Graph lines use the same temperature colours as their points and the timetable, including the dashed overnight period. Temperatures above 19°C use red shades; cooler settings use green and blue. Labels sit beside graph steps, with a background outline to keep crossing lines clear of the text. Use **Copy to Other Days** to copy a day's schedule.
 
-Schedules may begin after midnight. A dashed graph segment before the first schedule point shows the previous day's final temperature, including weekly wraparound. Hover over this segment or its open start marker to see the temperature, time interval, and previous day—for example, “00:00–06:00: Heating off (1°C), carried over from Sunday”. It has no editable point and is never written. Identical duplicate padding is collapsed; different schedule times with equal temperatures remain distinct.
+Schedules may begin after midnight. A dashed graph segment before the first setpoint shows the previous day's final temperature, including weekly wraparound. Hover over this segment or its open start marker to see the temperature, time interval, and previous day—for example, “00:00–06:00: Heating off (1°C), carried over from Sunday”. It has no editable point and is never written. Identical duplicate padding is collapsed; different schedule times with equal temperatures remain distinct.
 
 Save validates the draft and publishes only changed days:
 

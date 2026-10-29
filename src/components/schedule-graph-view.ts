@@ -737,7 +737,7 @@ export class ScheduleGraphView extends LitElement {
       ? `M ${this.hourToX(0, width)},${this.tempToY(carryOver.temperature, height)} L ${this.hourToX(this.timeToHours(carryOver.until), width)},${this.tempToY(carryOver.temperature, height)} L ${this.hourToX(this.timeToHours(carryOver.until), width)},${this.tempToY(transitions[0].temperature, height)}`
       : '';
     const inferredDescription = carryOver
-      ? `00:00–${carryOver.until}: ${carryOver.temperature === 1 ? 'Heating off (1°C)' : `${carryOver.temperature}°C`} · carried over from ${carryOver.day.charAt(0).toUpperCase() + carryOver.day.slice(1)}. Display only; not a stored schedule point.`
+      ? `00:00–${carryOver.until}: ${carryOver.temperature === 1 ? 'Heating off (1°C)' : `${carryOver.temperature}°C`} · carried over from ${carryOver.day.charAt(0).toUpperCase() + carryOver.day.slice(1)}. Display only; not a stored setpoint.`
       : '';
     const inferred = carryOver
       ? svg`
@@ -863,9 +863,9 @@ export class ScheduleGraphView extends LitElement {
           class="action-button"
           @click="${this.addTransition}"
           ?disabled="${!canAdd || this.disabled}"
-          title="${canAdd ? 'Add a time and temperature' : 'Maximum 6 schedule points per day'}"
+          title="${canAdd ? 'Add a time and temperature' : 'Maximum 6 setpoints per day'}"
         >
-          + Add schedule point
+          + Add setpoint
         </button>
         <button
           class="action-button secondary"
