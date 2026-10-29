@@ -8,7 +8,7 @@ At original commit `3bb711b`, before Hive changes:
 - `npm test`: 358 tests passed across nine files.
 - `npx tsc --noEmit`: passed.
 - `npm run build`: passed.
-- npm reported 16 vulnerabilities: 2 low, 3 moderate, 9 high, and 2 critical. These are inherited dependency findings. No broad dependency upgrade or automatic audit fix is included; review `npm audit` before a production release.
+- npm reported 16 vulnerabilities: 2 low, 3 moderate, 9 high, and 2 critical. These were inherited dependency findings recorded at baseline; the dependency update below supersedes this audit result.
 
 Inherited tests that expected automatic midnight defaults, silent repair, guessed MQTT names, or publish-based success are adapted to Hive behavior. UI, copy dialog, time, validation, and fixture coverage is retained, with added entity discovery and receiver verification scenarios.
 
@@ -38,3 +38,21 @@ The carried-over temperature appears in a hover tooltip, without a persistent le
 Graph periods and the inferred overnight period use the same temperature palette as their points and timetable entries. Rendering tests cover blue below 10°C, green at both 10°C and 15°C, near-red at 20°C and 25°C, pure red at 25.5°C, plus off settings while keeping the overnight hover details and thin dashes. Slider tracks derive their gradient from the same palette at the actual temperature positions; thumb outlines match the selected temperature.
 
 Graph time and temperature labels sit beside vertical steps with a background-colour outline. Late-day labels face inward to stay inside the graph; low-temperature labels sit above the point to avoid the time axis. A rendering test covers arbitrary-minute and 23:59 label placement. The labels were checked in desktop and narrow Chrome previews. User-facing controls and validation messages use “setpoint” for each time-and-temperature setting.
+
+## Dependency update — 29 October 2026
+
+The development toolchain now uses Node.js 24.15+ on the 24.x line, or Node.js 26+. CI and build workflows use Node 24; `.nvmrc` selects it locally. The browser card does not require Node.js in Home Assistant.
+
+Updated Lit, Rollup and its plugins, Testing Library, jsdom, Vitest, Vite, TypeScript and Node types. Vite is now explicit because Vitest 5 declares it as a peer dependency. TypeScript stays on `~6.0.3`: TypeScript 7.0 does not expose the programmatic compiler API required by the Rollup TypeScript plugin. Node types track the Node 24 development baseline.
+
+Validation with the new lockfile:
+
+- `npm ci`: passes without peer-dependency overrides.
+- `npm test`: all 422 tests pass, with the existing suite unchanged.
+- `npx tsc --noEmit`: passes.
+- `npm run build`: exits zero; repeated builds have identical JavaScript hashes and retain the full original MIT notice.
+- `npm audit`: 2 low findings, down from 16; no moderate, high or critical findings remain.
+- `npm audit --omit=dev`: zero findings.
+- The rebuilt JavaScript passed a jsdom smoke check: seven native day schedules, two graph points, matching timetable/graph colours and minute labels, without hardware writes.
+
+The two remaining low findings are the build-only `@rollup/plugin-node-resolve` → `deepmerge` advisory [GHSA-gcqx-w48m-w2h4](https://github.com/advisories/GHSA-gcqx-w48m-w2h4). The current `deepmerge` release (4.3.1) has no patched version. npm proposes downgrading the resolver to 7.1.3, which is outside the supported Rollup 4 plugin line; that downgrade was not applied. No force install, dependency override or audit suppression was added.

@@ -105,6 +105,8 @@ The owner confirmed completion of this hardware acceptance procedure on 29 Octob
 
 ## Development
 
+Use Node.js 24.15+ on the 24.x line (`nvm use` reads `.nvmrc`), or Node.js 26+. This is a development requirement; the installed card runs in the Home Assistant browser.
+
 ```sh
 npm ci
 npm test
@@ -118,3 +120,5 @@ Rebuild and commit the JavaScript alongside source changes. CI verifies the comm
 Tag-triggered release automation creates **draft releases only**. Optional inherited Claude automation requires repository variable `ENABLE_CLAUDE_AUTOMATION=true` and its credentials.
 
 See [development validation](docs/development-validation.md) for baseline results, dependency findings, and hardware status.
+
+For inclusion in HACS’s default catalogue, see the [submission guide](docs/hacs-submission.md). Custom-repository installation already works; default inclusion also requires a published GitHub release and a PR to `hacs/default`.
