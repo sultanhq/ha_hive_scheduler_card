@@ -16,7 +16,7 @@ Inherited tests that expected automatic midnight defaults, silent repair, guesse
 
 The owner reports the existing converter is hardware-tested. The reference converter is unchanged and is not bundled into the card.
 
-The card's complete read/edit/write/read-back and physical-remote acceptance remains pending owner confirmation. Mock tests and browser previews are not physical-device tests. No production release is authorized by these results.
+On 29 October 2026, the owner confirmed completion of the card's hardware acceptance: all seven days displayed correctly, temperature changes were saved and verified against the physical Hive remote, and backup, copying and restoration checks were completed. This is owner-reported hardware validation; the agent's tests and browser previews used mocks. No production release has been requested.
 
 ## Hive implementation validation
 
@@ -29,7 +29,7 @@ The card's complete read/edit/write/read-back and physical-remote acceptance rem
 - Desktop and 360-pixel card-width layouts were inspected in Chrome using the local mock preview. A manual temperature edit, publish, and verified mock read-back succeeded. No physical schedule was read or written during this preview.
 - Production compilation uses non-watching TypeScript sys hooks to avoid inherited compiler watchers keeping Node 24 alive after bundle creation. Development watch mode retains real watchers.
 
-Hardware acceptance remains pending. Installation and the backup/edit/read-back/remote-confirmation/restore procedure are documented in README.md.
+Hardware acceptance is complete following the owner's confirmation on 29 October 2026. Installation and the repeatable backup/edit/read-back/remote-confirmation/restore procedure are documented in README.md.
 
 ## Start-of-day graph follow-up
 

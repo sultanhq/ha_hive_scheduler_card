@@ -13,18 +13,18 @@ Derived from [abaddon's Sonoff TRVZB Scheduler Card](https://github.com/abaddon/
 - Home Assistant 2024.1 or newer. Viewing requires entity access. **Verified saving requires a Home Assistant administrator**, because HA's MQTT listener requires administrator permissions.
 - Temperatures: **1°C off**, or **5–32°C in 0.5°C steps**. One to six chronological setpoints per day, with every minute supported.
 
-The owner has hardware-tested the converter. The card's complete end-to-end hardware acceptance remains pending owner confirmation. No production release has been published for this implementation.
+The owner has hardware-tested the converter and confirmed the card's complete end-to-end hardware acceptance on 29 October 2026. No production release has been published for this implementation.
 
 ## HACS installation
 
-After the Hive feature branch is merged into this repository's `main`:
+Install this repository as a custom HACS Dashboard repository:
 
 1. Open HACS → menu → **Custom repositories**.
 2. Add `https://github.com/sultanhq/ha_hive_scheduler_card`, category **Dashboard** (`plugin` in older interfaces).
 3. Download **Hive Scheduler Card** from the default branch and reload the frontend.
 4. Verify resource `/hacsfiles/ha_hive_scheduler_card/hive-scheduler-card.js`, type **JavaScript module**, under Settings → Dashboards → Resources. Add it manually if HACS has not registered it.
 
-The compiled file is committed under `dist/`, so a GitHub release and inclusion in the main HACS catalogue are unnecessary. Do not install the inherited Sonoff `main` while the Hive changes remain only in a draft PR.
+The compiled file is committed under `dist/`, so a GitHub release and inclusion in the main HACS catalogue are unnecessary. Install from this repository's `main` branch.
 
 ## Manual development installation
 
@@ -101,7 +101,7 @@ After explicit approval for a hardware write:
 4. Restore the backup and verify read-back and remote display.
 5. Back up a target day, test copying to it, then restore and verify it.
 
-Physical testing remains incomplete until the owner confirms it. Production publication is a separate action after acceptance.
+The owner confirmed completion of this hardware acceptance procedure on 29 October 2026. The procedure above remains available for future installation checks. Production publication is a separate action.
 
 ## Development
 
