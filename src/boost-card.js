@@ -11,6 +11,7 @@
   const validDevice = (n) => typeof n === 'string' && n.trim().length > 0 && n.length <= 256 && !/[+/#\x00-\x1f\x7f]/.test(n);
   const validEntity = (n) => typeof n === 'string' && /^climate\.[a-z0-9_]+$/.test(n);
   const holdEnabled = (v) => v === true || v === 1 || v === 'true' || v === '1';
+  const holdDisabled = (v) => v === false || v === 0 || v === 'false' || v === '0';
   const styles = `
     :host { display:block; color:var(--primary-text-color, #222); font:inherit; }
     ha-card { display:block; padding:20px; border-radius:var(--ha-card-border-radius, 12px); }
@@ -70,6 +71,7 @@
       if (config.default_temperature !== undefined && !validTemp(Number(config.default_temperature))) throw new Error('Default temperature must be 5–32°C in 0.5°C steps.');
       if (config.default_duration !== undefined && !validDuration(Number(config.default_duration))) throw new Error('Default duration must be 1–360 minutes.');
       this._resetSubscription();
+      this._clearPending();
       this._config = { ...config };
       this._temp = config.default_temperature === undefined ? 21 : Number(config.default_temperature);
       this._duration = config.default_duration === undefined ? 60 : Number(config.default_duration);
@@ -144,18 +146,28 @@
       const keys = ['occupied_heating_setpoint','temperature_setpoint_hold','temperature_setpoint_hold_duration','system_mode','local_temperature'];
       if (!keys.some(key => Object.prototype.hasOwnProperty.call(update,key))) return;
       this._data = { ...(this._data || {}), ...Object.fromEntries(keys.filter(key => Object.prototype.hasOwnProperty.call(update,key)).map(key => [key,update[key]])) };
-      if (this._pending && !message.retain && this._matchesPending(this._pending, this._data)) {
-        this._status = this._pending.kind === 'start' ? 'Boost confirmed by receiver.' : 'Boost cancelled; normal scheduling resumed.';
-        this._error = '';
-        this._clearPending();
+      if (this._pending && !message.retain) {
+        // Display state may include cached/retained values. Verification belongs
+        // to this command and only accumulates fresh receiver feedback.
+        Object.assign(this._pending.feedback, Object.fromEntries(keys
+          .filter(key => Object.prototype.hasOwnProperty.call(update,key))
+          .map(key => [key,update[key]])));
+        if (this._matchesPending(this._pending, this._pending.feedback)) {
+          this._status = this._pending.kind === 'start' ? 'Boost confirmed by receiver.' : 'Boost cancelled; normal scheduling resumed.';
+          this._error = '';
+          this._clearPending();
+        }
       }
       this._render();
     }
     _matchesPending(command,data) {
-      if (!Object.prototype.hasOwnProperty.call(data,'temperature_setpoint_hold')) return false;
-      if (command.kind === 'stop') return !holdEnabled(data.temperature_setpoint_hold);
+      const required = ['temperature_setpoint_hold','temperature_setpoint_hold_duration','system_mode'];
+      if (command.kind === 'start') required.push('occupied_heating_setpoint');
+      if (!required.every(key => Object.prototype.hasOwnProperty.call(data,key))) return false;
       const duration = Number(data.temperature_setpoint_hold_duration);
-      return holdEnabled(data.temperature_setpoint_hold)
+      if (command.kind === 'stop') return holdDisabled(data.temperature_setpoint_hold)
+        && data.temperature_setpoint_hold_duration !== null && duration === 0 && data.system_mode === 'auto';
+      return holdEnabled(data.temperature_setpoint_hold) && data.system_mode === 'heat'
         && Number.isFinite(duration) && duration > 0 && duration <= command.duration
         && Math.abs(Number(data.occupied_heating_setpoint)-command.temp) < .05;
     }
@@ -174,7 +186,7 @@
         this._render();
         return;
       }
-      const pending = {kind,temp:this._temp,duration:this._duration};
+      const pending = {kind,temp:this._temp,duration:this._duration,feedback:{}};
       // One atomic MQTT publish for all receiver settings; never split into separate commands.
       const payload = kind === 'start'
         ? {system_mode:'heat',occupied_heating_setpoint:this._temp,temperature_setpoint_hold_duration:this._duration,temperature_setpoint_hold:true}

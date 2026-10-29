@@ -113,12 +113,84 @@ describe('Hive Boost Card in same HACS resource', () => {
     click('#confirm');
     await flush();
     // Act: a stale retained message should not confirm, a fresh response should.
-    emit({ temperature_setpoint_hold: true, temperature_setpoint_hold_duration: 60, occupied_heating_setpoint: 21 }, true);
+    emit({ temperature_setpoint_hold: true, temperature_setpoint_hold_duration: 60, occupied_heating_setpoint: 21, system_mode: 'heat' }, true);
     expect(card.shadowRoot.textContent).toContain('Waiting for receiver confirmation');
-    emit({ temperature_setpoint_hold: true, temperature_setpoint_hold_duration: 60, occupied_heating_setpoint: 21 });
+    emit({ temperature_setpoint_hold: true, temperature_setpoint_hold_duration: 60, occupied_heating_setpoint: 21, system_mode: 'heat' });
     // Assert: receiver verification changes the status.
     expect(card.shadowRoot.textContent).toContain('Boost confirmed by receiver');
     expect(card.shadowRoot.querySelector('#badge').textContent).toContain('Hold active');
+  });
+
+  it.each([false, true])('does not confirm from pre-command cached settings (retained: %s) and a fresh room temperature', async retained => {
+    const { card, click, emit, flush } = await mount();
+    emit({ temperature_setpoint_hold: true, temperature_setpoint_hold_duration: 60, occupied_heating_setpoint: 21, system_mode: 'heat' }, retained);
+    click('#boost'); click('#confirm'); await flush();
+    emit({ local_temperature: 20 });
+    expect(card.shadowRoot.textContent).toContain('Waiting for receiver confirmation');
+    expect(card.shadowRoot.textContent).not.toContain('Boost confirmed by receiver');
+  });
+
+  it('does not combine post-command retained settings with an unrelated fresh update', async () => {
+    const { card, click, emit, flush } = await mount();
+    click('#boost'); click('#confirm'); await flush();
+    emit({ temperature_setpoint_hold: true, temperature_setpoint_hold_duration: 60, occupied_heating_setpoint: 21, system_mode: 'heat' }, true);
+    emit({ local_temperature: 20 });
+    expect(card.shadowRoot.textContent).toContain('Waiting for receiver confirmation');
+  });
+
+  it('accumulates fresh command fields and waits until every field is reported', async () => {
+    const { card, click, emit, flush } = await mount();
+    click('#boost'); click('#confirm'); await flush();
+    emit({ temperature_setpoint_hold: true });
+    emit({ occupied_heating_setpoint: 21 });
+    emit({ temperature_setpoint_hold_duration: 59 });
+    expect(card.shadowRoot.textContent).toContain('Waiting for receiver confirmation');
+    emit({ system_mode: 'heat' });
+    expect(card.shadowRoot.textContent).toContain('Boost confirmed by receiver');
+  });
+
+  it.each(['off', 'auto'])('does not confirm a boost while the receiver stays in %s mode', async system_mode => {
+    const { card, click, emit, flush } = await mount();
+    click('#boost'); click('#confirm'); await flush();
+    emit({ temperature_setpoint_hold: true, temperature_setpoint_hold_duration: 60, occupied_heating_setpoint: 21, system_mode });
+    expect(card.shadowRoot.textContent).toContain('Waiting for receiver confirmation');
+    emit({ system_mode: 'heat' });
+    expect(card.shadowRoot.textContent).toContain('Boost confirmed by receiver');
+  });
+
+  it('requires fresh cleared hold, zero duration and auto mode before confirming cancellation', async () => {
+    const { card, click, emit, flush } = await mount();
+    emit({ temperature_setpoint_hold: true, temperature_setpoint_hold_duration: 45, occupied_heating_setpoint: 22, system_mode: 'heat' });
+    click('#stop'); await flush();
+    emit({ temperature_setpoint_hold: false });
+    expect(card.shadowRoot.textContent).toContain('Waiting for receiver confirmation');
+    emit({ system_mode: 'auto' });
+    expect(card.shadowRoot.textContent).toContain('Waiting for receiver confirmation');
+    emit({ temperature_setpoint_hold_duration: 0 });
+    expect(card.shadowRoot.textContent).toContain('Boost cancelled; normal scheduling resumed');
+  });
+
+  it('ignores retained cancellation fields and requires the receiver to return to auto', async () => {
+    const { card, click, emit, flush } = await mount();
+    emit({ temperature_setpoint_hold: true, temperature_setpoint_hold_duration: 45, system_mode: 'heat' });
+    click('#stop'); await flush();
+    emit({ temperature_setpoint_hold: false, temperature_setpoint_hold_duration: 0, system_mode: 'auto' }, true);
+    emit({ local_temperature: 20 });
+    expect(card.shadowRoot.textContent).toContain('Waiting for receiver confirmation');
+    emit({ temperature_setpoint_hold: false, temperature_setpoint_hold_duration: 0, system_mode: 'heat' });
+    expect(card.shadowRoot.textContent).toContain('Waiting for receiver confirmation');
+    emit({ system_mode: 'auto' });
+    expect(card.shadowRoot.textContent).toContain('Boost cancelled; normal scheduling resumed');
+  });
+
+  it('abandons pending verification when the card configuration changes', async () => {
+    const { card, click, emit, flush } = await mount();
+    click('#boost'); click('#confirm'); await flush();
+    card.setConfig({ entity: 'climate.hive_reciever', mqtt_device: 'Hive Reciever' });
+    await flush();
+    emit({ temperature_setpoint_hold: true, temperature_setpoint_hold_duration: 60, occupied_heating_setpoint: 21, system_mode: 'heat' });
+    expect(card.shadowRoot.textContent).not.toContain('Boost confirmed by receiver');
+    expect(card.shadowRoot.querySelector('#boost').disabled).toBe(false);
   });
 
   it('cancels a hold by returning the receiver to auto, without editing the timetable', async () => {

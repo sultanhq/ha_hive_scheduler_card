@@ -185,3 +185,11 @@ verify the remote display, receiver feedback, expiry, and manual cancellation
 before relying on it for unattended heating. The SLR1c exposes only
 `off`, `auto` and `heat` system modes, unlike some older Hive variants
 which document `emergency_heating`.
+
+### Local Boost preview
+
+Run `npm ci` and `npm run build`, then serve the checkout with `python3 -m http.server 8124 --bind 127.0.0.1`. Open [the mock preview](http://127.0.0.1:8124/test-component.html#boost-desktop) and scroll to the desktop/mobile Boost cards. This page has no Home Assistant connection and never writes hardware.
+
+The preview defaults to a five-minute boost. Select **Boost**, review and **Confirm Boost**, then try **Cancel Boost**. **Advance mock by 1 minute** tests receiver expiry without waiting in real time. The **Boost feedback** selector simulates retained-only feedback, wrong system mode, or no feedback; **Send room temperature only** demonstrates that unrelated updates cannot confirm a command. Switch back to normal feedback and use **Read mock receiver** for a fresh response.
+
+Verification requires fresh non-retained command fields: hold, finite duration, setpoint and `heat` mode for a start; cleared hold, zero duration and `auto` mode for cancellation. Cached display data cannot confirm either operation.
