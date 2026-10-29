@@ -31,6 +31,9 @@ describe('Hive UI regressions', () => {
     const { card, week, root } = await mount(); event(week, 'day-selected', { day: 'monday' }); await tick(card);
     const editor = root.querySelector('hive-day-schedule-editor') as any; await tick(editor);
     const transition = editor.shadowRoot.querySelector('hive-transition-editor'); await tick(transition);
+    const slider = transition.shadowRoot.querySelector('.temperature-slider') as HTMLInputElement;
+    const badge = transition.shadowRoot.querySelector('.temperature-display') as HTMLDivElement;
+    expect(slider.style.getPropertyValue('--temperature-color').trim()).toBe(badge.style.backgroundColor);
     const selects = transition.shadowRoot.querySelectorAll('.time-select');
     expect(selects[0].disabled).toBe(false); expect(selects[1].value).toBe('07');
     expect(selects[1].options).toHaveLength(60);
@@ -66,8 +69,8 @@ describe('Hive UI regressions', () => {
     const { root } = await mount('graph');
     const graph = root.querySelector('hive-schedule-graph-view') as any;
     graph.schedule = { ...graph.schedule, monday: { transitions: [
-      { time: '06:07', temperature: 19.5 }, { time: '08:00', temperature: 20 },
-      { time: '10:00', temperature: 20.5 }, { time: '12:00', temperature: 32 },
+      { time: '06:07', temperature: 25.5 }, { time: '08:00', temperature: 20 },
+      { time: '10:00', temperature: 20.5 }, { time: '12:00', temperature: 25 },
       { time: '16:00', temperature: 19 }, { time: '19:31', temperature: 1 }
     ] } };
     await tick(graph);
@@ -76,6 +79,8 @@ describe('Hive UI regressions', () => {
     expect(segments).toHaveLength(6);
     expect(segments.map(segment => segment.getAttribute('stroke'))).toEqual(points.map(point => point.getAttribute('fill')));
     expect(new Set(segments.map(segment => segment.getAttribute('stroke'))).size).toBe(6);
+    expect(points[0].getAttribute('fill')).toBe('rgb(255, 0, 0)');
+    expect(points[3].getAttribute('fill')).not.toBe('rgb(255, 0, 0)');
     for (const point of points.slice(0, 4)) {
       const [red, green, blue] = point.getAttribute('fill')!.match(/\d+/g)!.map(Number);
       expect(red).toBeGreaterThan(green * 2);

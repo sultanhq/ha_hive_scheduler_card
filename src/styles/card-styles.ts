@@ -1,19 +1,24 @@
-import { css } from 'lit';
+import { css, unsafeCSS } from 'lit';
 
 /**
  * Shared temperature palette: cool blue through green up to 19°C,
- * then coral red through deeper red for warmer heating settings.
+ * then near-red up to 25°C and pure red above 25°C.
  */
 export function getTemperatureColor(temp: number): string {
   const clampedTemp = Math.max(1, Math.min(32, temp));
+  if (clampedTemp > 25) return 'rgb(255, 0, 0)';
   if (clampedTemp > 19) {
-    const t = (clampedTemp - 19) / (32 - 19);
-    return `rgb(${Math.round(239 - 28 * t)}, ${Math.round(83 - 36 * t)}, ${Math.round(80 - 33 * t)})`;
+    const t = (clampedTemp - 19) / (25 - 19);
+    return `rgb(${Math.round(239 + 12 * t)}, ${Math.round(83 - 30 * t)}, ${Math.round(80 - 27 * t)})`;
   }
 
   const t = Math.max(0, (clampedTemp - 14) / (19 - 14));
   return `rgb(${Math.round(100 * t)}, ${Math.round(150 + 50 * t)}, ${Math.round(255 - 205 * t)})`;
 }
+
+// Position palette stops on the heating slider’s actual 5–32°C scale.
+const temperatureSliderGradient = `linear-gradient(to right, ${[5, 14, 19, 19.5, 25, 25.5, 32]
+  .map(temp => `${getTemperatureColor(temp)} ${((temp - 5) / 27) * 100}%`).join(', ')})`;
 
 /**
  * Main card styles
@@ -329,12 +334,7 @@ export const cardStyles = css`
     width: 100%;
     height: 6px;
     border-radius: 3px;
-    background: linear-gradient(
-      to right,
-      rgb(0, 150, 255) 0%,
-      rgb(100, 200, 50) 50%,
-      rgb(255, 80, 20) 100%
-    );
+    background: ${unsafeCSS(temperatureSliderGradient)};
     outline: none;
     -webkit-appearance: none;
     appearance: none;

@@ -146,12 +146,6 @@ export class TransitionEditor extends LitElement {
         width: 100%;
         height: 8px;
         border-radius: 4px;
-        background: linear-gradient(
-          to right,
-          rgb(0, 150, 255) 0%,
-          rgb(100, 200, 50) 50%,
-          rgb(255, 80, 20) 100%
-        );
         outline: none;
         -webkit-appearance: none;
         appearance: none;
@@ -165,7 +159,7 @@ export class TransitionEditor extends LitElement {
         height: 22px;
         border-radius: 50%;
         background: white;
-        border: 3px solid var(--primary-color);
+        border: 3px solid var(--temperature-color, var(--primary-color));
         cursor: pointer;
         box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
         transition: transform 0.2s ease;
@@ -184,7 +178,7 @@ export class TransitionEditor extends LitElement {
         height: 22px;
         border-radius: 50%;
         background: white;
-        border: 3px solid var(--primary-color);
+        border: 3px solid var(--temperature-color, var(--primary-color));
         cursor: pointer;
         box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
         transition: transform 0.2s ease;
@@ -506,6 +500,7 @@ export class TransitionEditor extends LitElement {
               <input
                 type="range"
                 class="temperature-slider"
+                style="--temperature-color: ${this._getTemperatureColor()}"
                 min="5"
                 max="32"
                 step="0.5"
