@@ -90,15 +90,20 @@ export class HiveSchedulerCard extends LitElement {
   public setConfig(config: HiveSchedulerCardConfig): void {
     if (!config.entity || !/^climate\.[a-z0-9_]+$/.test(config.entity)) throw new Error('You must specify a climate entity');
     if (config.mqtt_device) validateMqttDevice(config.mqtt_device);
+    if (config.view_mode && !['week', 'graph'].includes(config.view_mode)) throw new Error('view_mode must be week or graph');
+    const nextViewMode = config.view_mode || 'week';
     // HA may reapply the same configuration during live state updates. Never
     // discard a schedule draft, active editor or in-flight save in that case.
     if (this.config && JSON.stringify([this.config.entity, this.config.mqtt_device || '', this.config.schedule_entities || {}]) ===
       JSON.stringify([config.entity, config.mqtt_device || '', config.schedule_entities || {}])) {
-      this.config = { ...config, schedule_entities: { ...config.schedule_entities }, view_mode: config.view_mode || 'week' };
+      const previousViewMode = this.config.view_mode || 'week';
+      this.config = { ...config, schedule_entities: { ...config.schedule_entities }, view_mode: nextViewMode };
+      // Update the visible view only when the editor changed the configured
+      // default. Reapplying unchanged config must not override a manual toggle.
+      if (previousViewMode !== nextViewMode) this._viewMode = nextViewMode;
       return;
     }
     this._resolvedDevice = null;
-    if (config.view_mode && !['week', 'graph'].includes(config.view_mode)) throw new Error('view_mode must be week or graph');
     this._generation++;
     this._coordinator.cancel();
     this._entities = null;
