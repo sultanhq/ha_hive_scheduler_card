@@ -112,7 +112,7 @@ export function isValidMqttTopicSegment(input: string): boolean {
 }
 
 /** Reject unsafe names without changing spelling, whitespace, or case. */
-export function validateMqttDevice(input: string): void {
+export function validateMqttDevice(input: string | undefined): void {
   if (typeof input !== 'string' || !isValidMqttTopicSegment(input)) {
     throw new Error('mqtt_device must be a non-empty friendly name without /, +, # or control characters.');
   }

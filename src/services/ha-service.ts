@@ -1,6 +1,7 @@
 /** Home Assistant entity discovery and receiver schedule access. */
 import { HomeAssistant, WeeklySchedule, DAYS_OF_WEEK, HiveSchedulerCardConfig, ScheduleEntities, EntityRegistryEntry } from '../models/types';
 import { parseDaySchedule } from '../models/schedule';
+import { validateMqttDevice } from './mqtt-sanitizer';
 export { SaveCoordinator } from './save-coordinator';
 
 export function isInvalidSensorState(state: string | null | undefined): boolean {
@@ -28,6 +29,66 @@ export async function resolveScheduleEntities(hass: HomeAssistant, config: HiveS
   }
   if (new Set(Object.values(resolved)).size !== 7) throw new Error('Each day must use a different schedule entity.');
   return resolved;
+}
+
+
+/**
+ * Resolve the receiver's exact MQTT topic segment from the selected Home Assistant
+ * climate entity, NOT from its mutable friendly_name/display label. Only an exact,
+ * unique zigbee2mqtt/<device> state topic is safe for MQTT writes.
+ *
+ * Home Assistant's mqtt/device/debug_info WebSocket endpoint requires an admin.
+ * The explicit mqtt_device override remains supported when metadata is unavailable.
+ */
+export async function resolveMqttDevice(hass: HomeAssistant, config: HiveSchedulerCardConfig): Promise<string> {
+  if (config.mqtt_device?.trim()) {
+    validateMqttDevice(config.mqtt_device);
+    return config.mqtt_device;
+  }
+  if (!hass.callWS || !hass.user?.is_admin) {
+    throw new Error('MQTT topic discovery requires a Home Assistant administrator. Set mqtt_device explicitly if discovery is unavailable.');
+  }
+  const registry = await hass.callWS<EntityRegistryEntry[]>({ type: 'config/entity_registry/list' });
+  const deviceId = registry.find(entry => entry.entity_id === config.entity)?.device_id;
+  if (!deviceId) throw new Error('Cannot identify the climate device in the entity registry. Set mqtt_device explicitly.');
+  const debug = await hass.callWS<{
+    entities?: Array<{
+      entity_id?: string;
+      subscriptions?: Array<{ topic?: string }>;
+      discovery_data?: { payload?: unknown };
+    }>;
+  }>({ type: 'mqtt/device/debug_info', device_id: deviceId });
+  const candidates = new Set<string>();
+  const addTopic = (topic: unknown): void => {
+    if (typeof topic !== 'string') return;
+    const match = /^zigbee2mqtt\/([^/+#\x00-\x1f\x7f]+)$/.exec(topic);
+    if (match) candidates.add(match[1]);
+  };
+  // Use the selected climate entity's MQTT metadata, not unrelated devices or labels.
+  for (const entry of debug.entities || []) {
+    if (entry.entity_id !== config.entity) continue;
+    for (const subscription of entry.subscriptions || []) addTopic(subscription.topic);
+    let payload = entry.discovery_data?.payload;
+    if (typeof payload === 'string') {
+      try { payload = JSON.parse(payload); } catch { payload = null; }
+    }
+    if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+      const fields = payload as Record<string, unknown>;
+      const base = typeof fields['~'] === 'string' ? fields['~'] : '';
+      for (const key of ['state_topic', 'stat_t']) {
+        const topic = fields[key];
+        if (typeof topic === 'string') addTopic(topic.replace(/^~/, base));
+      }
+    }
+  }
+  if (candidates.size !== 1) {
+    throw new Error(candidates.size === 0
+      ? 'No exact Zigbee2MQTT state topic found for the climate entity. Set mqtt_device explicitly.'
+      : 'Multiple Zigbee2MQTT topics match this climate entity. Set mqtt_device explicitly.');
+  }
+  const name = [...candidates][0];
+  validateMqttDevice(name);
+  return name;
 }
 
 export function getScheduleFromSensor(hass: HomeAssistant, entities: ScheduleEntities): WeeklySchedule {
