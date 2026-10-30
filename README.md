@@ -38,12 +38,12 @@ The compiled file is committed under `dist/`, so a GitHub release and inclusion 
 ```yaml
 type: custom:hive-scheduler-card
 entity: climate.hive_reciever  # illustrative: select your actual entity
-mqtt_device: "Hive Reciever"  # exact spelling, case, and embedded space
+ # mqtt_device: "Hive Reciever"  # optional exact topic name override
 name: Hive Heating
 view_mode: week              # week (default) or graph
 ```
 
-`entity` and `mqtt_device` are required and independent. The friendly name is used verbatim in MQTT topics. Wildcards, `/`, and control characters are rejected rather than replaced. `name` is optional.
+`entity` (the stable `climate.*` entity ID) is required. `mqtt_device` is an **optional override**: the card discovers the exact receiver MQTT state topic from Home Assistant MQTT device metadata, never by guessing from changing friendly-name labels. Discovery requires an administrator; if discovery is unavailable or ambiguous, supply the exact Zigbee2MQTT topic name as `mqtt_device`. Wildcards, `/`, and control characters are rejected. `name` only controls the card title.
 
 Schedule text entities are discovered through the climate entity's HA device and MQTT schedule identifiers. Renamed entities work independently of the climate entity ID. If discovery is missing or ambiguous, configure overrides in YAML or the visual editor:
 
@@ -134,13 +134,13 @@ The HACS installation includes **two separate Lovelace card types** in the same
 
 After updating the HACS dashboard package, reload the Home Assistant frontend
 and select **Hive Boost Card** in the Add Card dialog. Use the visual editor to
-choose your climate entity and the exact Zigbee2MQTT receiver friendly name.
+choose the stable `climate.*` entity ID. The exact Zigbee2MQTT topic name is automatically discovered; use the optional override only if discovery fails.
 The boost card does **not** require the seven schedule text entities.
 
 ```yaml
 type: custom:hive-boost-card
 entity: climate.hive_reciever  # select the actual climate entity
-mqtt_device: "Hive Reciever"  # exact Zigbee2MQTT friendly name
+ # mqtt_device: "Hive Reciever"  # optional exact topic name override
 name: Heating Boost
 default_temperature: 21      # fallback only when room temperature is unavailable
 default_duration: 60

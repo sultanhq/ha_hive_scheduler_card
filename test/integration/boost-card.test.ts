@@ -135,13 +135,13 @@ describe('Hive Boost Card in same HACS resource', () => {
     expect(card.shadowRoot.textContent).toContain('Boost confirmed by receiver');
   });
 
-  it('resets manual selection and room source on reconfiguration', async () => {
+  it('preserves in-progress controls when HA reapplies identical config', async () => {
     const { card, hass } = await mount();
     const slider = card.shadowRoot.querySelector('#temperature');
     slider.value = '25'; slider.dispatchEvent(new Event('input'));
     hass.states['climate.hive_reciever'].attributes.current_temperature = 21.5;
     card.setConfig({entity:'climate.hive_reciever',mqtt_device:'Hive Reciever'});
-    expect(card.shadowRoot.querySelector('#temperature').value).toBe('22.5');
+    expect(card.shadowRoot.querySelector('#temperature').value).toBe('25');
   });
 
   it('requires explicit confirmation before any MQTT write', async () => {
@@ -333,5 +333,16 @@ describe('Hive Boost Card in same HACS resource', () => {
     input.dispatchEvent(new Event('change'));
     // Assert: Home Assistant receives updated configuration.
     expect(changes.at(-1).mqtt_device).toBe('Hive Receiver 2');
+  });
+});
+
+
+describe('Boost entity-only configuration', () => {
+  it('accepts the climate entity without a manually entered friendly name', async () => {
+    const card = document.createElement('hive-boost-card') as any;
+    // Arrange - an entity ID is provided but no optional MQTT override.
+    // Act - configure the Boost card.
+    // Assert - no synchronous validation error is raised.
+    expect(() => card.setConfig({type:'custom:hive-boost-card',entity:'climate.hive_reciever'})).not.toThrow();
   });
 });

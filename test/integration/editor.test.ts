@@ -176,7 +176,7 @@ describe('Editor Component', () => {
       } else if (entityInput) {
         // Use input if select not available
         entityInput.value = 'climate.bedroom_hive';
-        entityInput.dispatchEvent(new Event('input', { bubbles: true }));
+        entityInput.dispatchEvent(new Event('change', { bubbles: true }));
         await editor.updateComplete;
 
         expect(configChangedSpy).toHaveBeenCalled();
@@ -201,7 +201,7 @@ describe('Editor Component', () => {
       expect(nameInput).toBeDefined();
       if (nameInput) {
         nameInput.value = 'My Custom Name';
-        nameInput.dispatchEvent(new Event('input', { bubbles: true }));
+        nameInput.dispatchEvent(new Event('change', { bubbles: true }));
         await editor.updateComplete;
 
         expect(configChangedSpy).toHaveBeenCalled();
@@ -254,7 +254,7 @@ describe('Editor Component', () => {
 
       if (nameInput) {
         nameInput.value = 'Updated Name';
-        nameInput.dispatchEvent(new Event('input', { bubbles: true }));
+        nameInput.dispatchEvent(new Event('change', { bubbles: true }));
         await editor.updateComplete;
 
         expect(configChangedSpy).toHaveBeenCalled();
@@ -280,7 +280,7 @@ describe('Editor Component', () => {
 
       if (nameInput) {
         nameInput.value = 'Test Name'; // Same value
-        nameInput.dispatchEvent(new Event('input', { bubbles: true }));
+        nameInput.dispatchEvent(new Event('change', { bubbles: true }));
         await editor.updateComplete;
 
         expect(configChangedSpy).not.toHaveBeenCalled();
@@ -298,7 +298,7 @@ describe('Editor Component', () => {
 
       if (nameInput) {
         nameInput.value = '';
-        nameInput.dispatchEvent(new Event('input', { bubbles: true }));
+        nameInput.dispatchEvent(new Event('change', { bubbles: true }));
         await editor.updateComplete;
 
         expect(configChangedSpy).toHaveBeenCalled();
@@ -382,7 +382,7 @@ describe('Editor Component', () => {
       }
     });
 
-    it('should show entity friendly names in options', async () => {
+    it('should show stable entity IDs instead of friendly names in options', async () => {
       const editor = await createEditor();
 
       const entitySelect = querySelector<HTMLSelectElement>(editor, '.editor-select');
@@ -392,9 +392,8 @@ describe('Editor Component', () => {
         const climateOptions = options.filter(opt => opt.value.startsWith('climate.'));
 
         climateOptions.forEach(option => {
-          // Option text should be more readable than entity_id
-          expect(option.textContent).toBeDefined();
-          expect(option.textContent!.length).toBeGreaterThan(0);
+          // Assert - volatile friendly names never replace the selected ID.
+          expect(option.textContent?.trim()).toBe(option.value);
         });
       }
     });
@@ -495,5 +494,27 @@ describe('Editor Component', () => {
 
       expect(nameLabel?.textContent?.toLowerCase()).toContain('optional');
     });
+  });
+});
+
+
+describe('stable form editing during Home Assistant updates', () => {
+  it('does not commit each keystroke or overwrite the active name input', async () => {
+    // Arrange - open a configured scheduler editor and listen for configuration saves.
+    const editor = await createEditor();
+    const spy = vi.fn();
+    editor.addEventListener('config-changed', spy);
+    const input = querySelector<HTMLInputElement>(editor, 'input[placeholder="Living Room Heating"]')!;
+    // Act - type a partial value, then receive an unrelated HA state update.
+    input.value = 'Partially typed';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    editor.hass = createMockHass({states: {'climate.living_room_hive': createMockHiveEntity('living_room_hive')}});
+    await editor.updateComplete;
+    // Assert - the text is still editable and is only saved on change/blur.
+    expect(spy).not.toHaveBeenCalled();
+    expect(input.value).toBe('Partially typed');
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.calls[0][0].detail.config.name).toBe('Partially typed');
   });
 });
