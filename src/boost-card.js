@@ -1,3 +1,5 @@
+import { resolveMqttDevice } from './services/mqtt-device.js';
+
 (function registerBoostCard() {
   'use strict';
   if (customElements.get('hive-boost-card')) return;
@@ -77,7 +79,7 @@
     get hass() { return this._hass; }
     setConfig(config) {
       if (!validEntity(config.entity)) throw new Error('Select a valid climate entity.');
-      if (!validDevice(config.mqtt_device)) throw new Error('Provide the exact Zigbee2MQTT friendly name (no /, +, # or control characters).');
+      if (config.mqtt_device && !validDevice(config.mqtt_device)) throw new Error('Provide the exact Zigbee2MQTT friendly name (no /, +, # or control characters).');
       if (config.default_temperature !== undefined && !validTemp(Number(config.default_temperature))) throw new Error('Default temperature must be 5–32°C in 0.5°C steps.');
       if (config.default_duration !== undefined && !validDuration(Number(config.default_duration))) throw new Error('Default duration must be 15–360 minutes.');
       this._resetSubscription();
@@ -105,7 +107,7 @@
       }
     }
     static getConfigElement() { return document.createElement('hive-boost-card-editor'); }
-    static getStubConfig() { return { entity:'', mqtt_device:'' }; }
+    static getStubConfig() { return { entity:'' }; }
     getCardSize() { return 3; }
     connectedCallback() { this._ensureSubscription(); this._render(); }
     disconnectedCallback() {
@@ -116,18 +118,22 @@
       this._generation++;
       if (this._unsub) { this._unsub(); this._unsub = null; }
       this._subKey = '';
+      this._mqttDevice = '';
       this._subscribing = false;
     }
     async _ensureSubscription() {
       if (!this._hass?.user?.is_admin) { this._resetSubscription(); return; }
       if (!this.isConnected || !this._config || !this._hass?.connection?.subscribeMessage) return;
-      const key = this._config.mqtt_device;
+      const key = JSON.stringify([this._config.entity, this._config.mqtt_device]);
       if (this._subKey === key || this._subscribing) return;
       this._resetSubscription();
       const generation = this._generation;
       this._subscribing = true;
       try {
-        const topic = `${BASE}/${key}`;
+        const device = await resolveMqttDevice(this._hass, this._config);
+        if (generation !== this._generation || !this.isConnected) return;
+        this._mqttDevice = device;
+        const topic = `${BASE}/${device}`;
         const unsub = await this._hass.connection.subscribeMessage(
           message => {
             if (generation === this._generation && message.topic === topic) this._receive(message);
@@ -148,10 +154,10 @@
       }
     }
     async _requestState() {
-      if (!this._config || !this._hass?.user?.is_admin) return;
+      if (!this._config || !this._mqttDevice || !this._hass?.user?.is_admin) return;
       try {
         await this._hass.callService('mqtt','publish',{
-          topic:`${BASE}/${this._config.mqtt_device}/get`,
+          topic:`${BASE}/${this._mqttDevice}/get`,
           payload:JSON.stringify({
             occupied_heating_setpoint:'',temperature_setpoint_hold:'',temperature_setpoint_hold_duration:'',system_mode:''
           }),
@@ -226,7 +232,7 @@
       this._render();
       try {
         await this._hass.callService('mqtt','publish',{
-          topic:`${BASE}/${this._config.mqtt_device}/set`,
+          topic:`${BASE}/${this._mqttDevice}/set`,
           payload:JSON.stringify(payload),
           retain:false
         });
@@ -264,7 +270,7 @@
       }
       const climate = this._hass?.states?.[this._config?.entity];
       const enabled = !!this._config && !!climate && !['unknown','unavailable'].includes(climate.state)
-        && !!this._hass?.user?.is_admin && this._subKey === this._config.mqtt_device && !this._working;
+        && !!this._hass?.user?.is_admin && this._subKey === JSON.stringify([this._config.entity, this._config.mqtt_device]) && !this._working;
       const hold = this._data && Object.prototype.hasOwnProperty.call(this._data,'temperature_setpoint_hold')
         ? holdEnabled(this._data.temperature_setpoint_hold) : null;
       const reportedDuration = Number(this._data?.temperature_setpoint_hold_duration);
@@ -369,49 +375,64 @@
     constructor() {
       super();
       this.attachShadow({mode:'open'});
-      this._config = {type:this._configType,entity:'',mqtt_device:''};
+      this._config = {type:this._configType,entity:''};
       this._hass = null;
     }
-    set hass(hass) { this._hass = hass; this._render(); }
+    set hass(hass) { this._hass = hass; this._render(false); }
     get hass() { return this._hass; }
     get _configType() { return 'custom:hive-boost-card'; }
-    setConfig(config) { this._config = {...config,type:this._configType}; this._render(); }
+    setConfig(config) {
+      const next = {...config,type:this._configType};
+      if (JSON.stringify(next) === JSON.stringify(this._config)) return;
+      this._config = next;
+      this._render();
+    }
     _changed(key,value) {
+      if (this._config[key] === value) return;
       this._config = {...this._config,[key]:value};
+      if (key === 'entity') delete this._config.mqtt_device;
       this.dispatchEvent(new CustomEvent('config-changed',{
         detail:{config:this._config},bubbles:true,composed:true
       }));
     }
     connectedCallback() {this._render();}
-    _render() {
+    _render(syncValues = true) {
       if (!this.shadowRoot) return;
       const root = this.shadowRoot;
-      root.innerHTML = `<style>
+      if (!root.querySelector('#entity')) {
+        root.innerHTML = `<style>
         :host {display:block}
         label {display:block; margin:14px 0 5px}
         select,input {box-sizing:border-box;width:100%;padding:10px;font:inherit;border:1px solid var(--divider-color,#aaa);border-radius:7px;background:var(--card-background-color,#fff);color:var(--primary-text-color,#222)}
         small {color:var(--secondary-text-color,#777)}
       </style>
       <label for="entity">Climate entity</label><select id="entity"></select>
-      <label for="mqtt">Zigbee2MQTT friendly name</label><input id="mqtt" placeholder="Hive Reciever">
-      <small>Use the exact receiver name, including spaces and spelling.</small>
+      <small>The Zigbee2MQTT receiver is discovered from the climate entity.</small>
       <label for="name">Name (optional)</label><input id="name" placeholder="Hive Boost">
       <label for="temp">Fallback temperature when room temperature is unavailable (5–32°C)</label><input id="temp" type="number" step=".5" min="5" max="32">
       <label for="duration">Default duration in minutes (15–360)</label><input id="duration" type="number" min="${MIN_DURATION}" max="360">`;
-      const entities = Object.keys(this._hass?.states || {}).filter(id=>id.startsWith('climate.'));
+        root.querySelector('#entity').addEventListener('change',e=>this._changed('entity',e.target.value));
+        root.querySelector('#entity').addEventListener('blur',()=>this._render(false));
+        for (const [id,key] of [['name','name'],['temp','default_temperature'],['duration','default_duration']]) {
+          root.querySelector('#'+id).addEventListener('change',e=>this._changed(key,id==='temp'||id==='duration'?Number(e.target.value):e.target.value));
+        }
+      }
+      const entities = Object.keys(this._hass?.states || {}).filter(id=>id.startsWith('climate.')).sort();
       const select = root.querySelector('#entity');
       const all = new Set([this._config.entity,...entities].filter(Boolean));
-      select.appendChild(new Option('Select climate entity',''));
-      for (const id of all) {
-        const text = this._hass?.states?.[id]?.attributes?.friendly_name || id;
-        select.appendChild(new Option(text,id));
+      const options = [...all].map(id=>[id,this._hass?.states?.[id]?.attributes?.friendly_name || id]);
+      const signature = JSON.stringify(options);
+      if (signature !== this._optionsSignature && root.activeElement !== select) {
+        select.replaceChildren(new Option('Select climate entity',''),...options.map(([id,text])=>new Option(text,id)));
+        this._optionsSignature = signature;
+        select.value = this._config.entity || '';
       }
-      select.value = this._config.entity || '';
-      select.addEventListener('change',e=>this._changed('entity',e.target.value));
-      for (const [id,key,fallback] of [['mqtt','mqtt_device',''],['name','name',''],['temp','default_temperature',21],['duration','default_duration',60]]) {
+      if (!syncValues) return;
+      if (select.value !== (this._config.entity || '')) select.value = this._config.entity || '';
+      for (const [id,key,fallback] of [['name','name',''],['temp','default_temperature',21],['duration','default_duration',60]]) {
         const input = root.querySelector('#'+id);
-        input.value = String(this._config[key] ?? fallback);
-        input.addEventListener('change',e=>this._changed(key,id==='temp'||id==='duration'?Number(e.target.value):e.target.value));
+        const value = String(this._config[key] ?? fallback);
+        if (input.value !== value) input.value = value;
       }
     }
   }

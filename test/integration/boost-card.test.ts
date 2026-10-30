@@ -4,11 +4,14 @@ import '../../src/boost-card.js';
 type MqttMessage = { topic: string; payload: string; retain: boolean };
 type Call = { domain: string; service: string; data: Record<string, unknown> };
 
-async function mount(admin = true, currentTemperature: unknown = 20) {
+async function mount(admin = true, currentTemperature: unknown = 20, autoDiscover = false) {
   const calls: Call[] = [];
   const listeners = new Set<(message: MqttMessage) => void>();
   const hass = {
     user: { is_admin: admin },
+    callWS: async (message: any) => message.type === 'config/entity_registry/list'
+      ? [{ entity_id: 'climate.hive_reciever', platform: 'mqtt', device_id: 'receiver' }]
+      : { entities: [{ entity_id: 'climate.hive_reciever', discovery_data: { payload: { current_temperature_topic: 'zigbee2mqtt/Hive Reciever' } } }] },
     states: {
       'climate.hive_reciever': {
         entity_id: 'climate.hive_reciever',
@@ -34,7 +37,7 @@ async function mount(admin = true, currentTemperature: unknown = 20) {
   card.setConfig({
     type: 'custom:hive-boost-card',
     entity: 'climate.hive_reciever',
-    mqtt_device: 'Hive Reciever',
+    ...(autoDiscover ? {} : { mqtt_device: 'Hive Reciever' }),
     default_temperature: 21,
     default_duration: 60,
   });
@@ -320,18 +323,31 @@ describe('Hive Boost Card in same HACS resource', () => {
     expect(writes()).toHaveLength(0);
   });
 
-  it('exposes an editable climate entity and MQTT device name', async () => {
+  it('selects the receiver using only the climate entity', async () => {
     // Arrange: the boost visual editor.
     const editor = document.createElement('hive-boost-card-editor') as any;
     const changes: any[] = [];
     editor.addEventListener('config-changed', (event: Event) => changes.push((event as CustomEvent).detail.config));
     editor.setConfig({ type: 'custom:hive-boost-card', entity: 'climate.hive_reciever', mqtt_device: 'Hive Reciever' });
     document.body.append(editor);
-    // Act: rename the MQTT device.
-    const input = editor.shadowRoot.querySelector('#mqtt') as HTMLInputElement;
-    input.value = 'Hive Receiver 2';
+    editor.hass = { states: { 'climate.other': { attributes: { friendly_name: 'Other receiver' } } } };
+    const input = editor.shadowRoot.querySelector('#entity') as HTMLSelectElement;
+    input.value = 'climate.other';
     input.dispatchEvent(new Event('change'));
     // Assert: Home Assistant receives updated configuration.
-    expect(changes.at(-1).mqtt_device).toBe('Hive Receiver 2');
+    expect(changes.at(-1).entity).toBe('climate.other');
+    expect(changes.at(-1).mqtt_device).toBeUndefined();
+    expect(editor.shadowRoot.querySelector('#mqtt')).toBeNull();
+  });
+
+  it('discovers the receiver and verifies a boost without mqtt_device', async () => {
+    const { calls, emit, click, flush, card } = await mount(true, 20, true);
+    expect(calls[0].data.topic).toBe('zigbee2mqtt/Hive Reciever/get');
+    emit({ system_mode: 'auto', temperature_setpoint_hold: false, temperature_setpoint_hold_duration: 0 });
+    click('#boost'); click('#confirm'); await flush();
+    expect(calls.find(call => String(call.data.topic).endsWith('/set'))?.data.topic).toBe('zigbee2mqtt/Hive Reciever/set');
+    emit({ system_mode: 'heat', occupied_heating_setpoint: 21, temperature_setpoint_hold: true, temperature_setpoint_hold_duration: 60 });
+    expect(card.shadowRoot.textContent).toContain('Boost active');
+    expect(card._working).toBe(false);
   });
 });

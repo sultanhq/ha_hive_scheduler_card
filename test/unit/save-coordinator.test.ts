@@ -135,13 +135,27 @@ describe('receiver-verified saving', () => {
   it('cleans up subscriptions that finish after cancellation', async () => {
     const f = fixture(); let finish!: (value: () => void) => void;
     vi.mocked(f.hass.connection!.subscribeMessage).mockReturnValue(new Promise(resolve => { finish = resolve; }));
-    const pending = f.start(); f.coordinator.cancel(); await pending;
+    const pending = f.start(); await vi.advanceTimersByTimeAsync(0); f.coordinator.cancel(); await pending;
     finish(f.unsubscribe); await vi.advanceTimersByTimeAsync(0); expect(f.unsubscribe).toHaveBeenCalledOnce();
   });
 
   it('publishes nothing when the schedule is unchanged', async () => {
     const f = fixture(); expect(await f.coordinator.save(f.hass, f.config, f.entities, f.original, structuredClone(f.original))).toEqual({ status: 'skipped' });
     expect(f.hass.callService).not.toHaveBeenCalled(); expect(f.hass.connection!.subscribeMessage).not.toHaveBeenCalled();
+  });
+
+  it('saves and verifies with only a climate entity configured', async () => {
+    const f = fixture(); delete f.config.mqtt_device;
+    f.hass.callWS = vi.fn().mockResolvedValueOnce([
+      { entity_id: f.config.entity, platform: 'mqtt', device_id: 'receiver' },
+    ]).mockResolvedValueOnce({ entities: [{ entity_id: f.config.entity, discovery_data: {
+      payload: { current_temperature_topic: 'zigbee2mqtt/Hive Reciever' },
+    } }] });
+    const pending = f.start(); await vi.advanceTimersByTimeAsync(0);
+    expect(f.hass.callService).toHaveBeenCalledWith('mqtt', 'publish', expect.objectContaining({ topic: 'zigbee2mqtt/Hive Reciever/set' }));
+    f.emit({ schedule_monday: '06:07/21 19:31/1' }); f.state('monday', '06:07/21 19:31/1');
+    await vi.advanceTimersByTimeAsync(100);
+    expect(await pending).toEqual({ status: 'success', daysUpdated: ['monday'] });
   });
 
   it.each(['bad/name', 'bad+', 'bad#', 'bad\nname', ''])('rejects unsafe MQTT device %j', async name => {

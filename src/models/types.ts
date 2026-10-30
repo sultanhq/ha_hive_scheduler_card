@@ -35,7 +35,7 @@ export interface HiveSchedulerCardConfig {
   entity: string;           // climate entity ID
   name?: string;            // optional display name
   view_mode?: 'week' | 'graph'; // default view mode
-  mqtt_device: string; // exact Zigbee2MQTT friendly name
+  mqtt_device?: string; // optional exact Zigbee2MQTT friendly name override
   schedule_entities?: Partial<Record<DayOfWeek, string>>;
 }
 

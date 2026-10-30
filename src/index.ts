@@ -8,6 +8,7 @@
 // Import main card and editor (these also import their dependencies)
 import { HiveSchedulerCard } from './card';
 import { HiveSchedulerCardEditor } from './editor';
+import './boost-card.js';
 
 // Import all child components (auto-register via @customElement decorator)
 import './components/schedule-week-view';

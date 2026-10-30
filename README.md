@@ -38,19 +38,17 @@ The compiled file is committed under `dist/`, so a GitHub release and inclusion 
 ```yaml
 type: custom:hive-scheduler-card
 entity: climate.hive_reciever  # illustrative: select your actual entity
-mqtt_device: "Hive Reciever"  # exact spelling, case, and embedded space
 name: Hive Heating
 view_mode: week              # week (default) or graph
 ```
 
-`entity` and `mqtt_device` are required and independent. The friendly name is used verbatim in MQTT topics. Wildcards, `/`, and control characters are rejected rather than replaced. `name` is optional.
+Only `entity` is required. The receiver's Zigbee2MQTT topic is discovered from the selected climate entity's MQTT metadata, independently of its entity ID and display name. `name` is optional. Existing `mqtt_device` configurations remain supported as explicit overrides; if automatic discovery is unavailable, set `mqtt_device: "Hive Reciever"` in YAML using the exact Zigbee2MQTT name. Wildcards, `/`, and control characters are rejected rather than replaced. Selecting a different climate entity in the visual editor clears the previous receiver override.
 
 Schedule text entities are discovered through the climate entity's HA device and MQTT schedule identifiers. Renamed entities work independently of the climate entity ID. If discovery is missing or ambiguous, configure overrides in YAML or the visual editor:
 
 ```yaml
 type: custom:hive-scheduler-card
 entity: climate.actual_hive_entity
-mqtt_device: "Hive Reciever"
 name: Hive Heating
 view_mode: graph
 schedule_entities:
@@ -134,13 +132,12 @@ The HACS installation includes **two separate Lovelace card types** in the same
 
 After updating the HACS dashboard package, reload the Home Assistant frontend
 and select **Hive Boost Card** in the Add Card dialog. Use the visual editor to
-choose your climate entity and the exact Zigbee2MQTT receiver friendly name.
+choose your climate entity. The receiver is discovered automatically.
 The boost card does **not** require the seven schedule text entities.
 
 ```yaml
 type: custom:hive-boost-card
 entity: climate.hive_reciever  # select the actual climate entity
-mqtt_device: "Hive Reciever"  # exact Zigbee2MQTT friendly name
 name: Heating Boost
 default_temperature: 21      # fallback only when room temperature is unavailable
 default_duration: 60
@@ -200,13 +197,12 @@ Use **Hive Boost Badge** in the dashboard’s **Add badge** picker to place Boos
 
 The compact badge shows room temperature while idle, **Boost active** and the receiver’s remaining minutes during a timed boost, and **Verifying…** while a command is pending. Tap it to open the existing Boost controls. Opening or closing the popup does not send a heating command; starting a boost still requires **Boost → Confirm Boost**. Closing the popup while verification is pending lets verification finish in the background.
 
-Configure it with the same climate entity and exact MQTT receiver name as the Boost card:
+Configure it with the same climate entity as the Boost card:
 
 ```yaml
 badges:
   - type: custom:hive-boost-badge
     entity: climate.hive_reciever
-    mqtt_device: "Hive Reciever"
     name: Heating
     default_duration: 30
 ```

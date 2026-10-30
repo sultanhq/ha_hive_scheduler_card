@@ -1,6 +1,6 @@
 import { DayOfWeek, HiveSchedulerCardConfig, HomeAssistant, MqttMessage, SaveScheduleResult, ScheduleEntities, WeeklySchedule } from '../models/types';
 import { buildPartialPayload, computeScheduleDiff, parseDaySchedule, serializeDaySchedule } from '../models/schedule';
-import { validateMqttDevice } from './mqtt-sanitizer';
+import { resolveMqttDevice } from './mqtt-device.js';
 
 /** One transaction per card. A service acknowledgement is never a save confirmation. */
 export class SaveCoordinator {
@@ -24,12 +24,12 @@ export class SaveCoordinator {
     let rejection: string | undefined;
     const fresh = new Map<DayOfWeek, string>();
     try {
-      validateMqttDevice(config.mqtt_device);
       const diff = computeScheduleDiff(original, draft);
       changed = diff.changedDays;
       if (!diff.hasChanges) return { status: 'skipped' };
       if (!hass.user?.is_admin || !hass.connection) throw new Error('Sign in as a Home Assistant administrator to verify and save schedules.');
-      const topic = `zigbee2mqtt/${config.mqtt_device}`;
+      const mqttDevice = await this.bounded(resolveMqttDevice(hass, config), signal);
+      const topic = `zigbee2mqtt/${mqttDevice}`;
       const subscribe = async (mqttTopic: string, callback: (message: MqttMessage) => void) => {
         const pending = hass.connection!.subscribeMessage<MqttMessage>(message => {
           if (!signal.aborted) callback(message);
@@ -55,7 +55,7 @@ export class SaveCoordinator {
           const log = JSON.parse(message.payload);
           // Require the exact quoted device name and an affected key. Unrelated errors cannot fail a save.
           if (log.level === 'error' && typeof log.message === 'string'
-            && (log.message.includes(`'${config.mqtt_device}'`) || log.message.includes(`\"${config.mqtt_device}\"`))
+            && (log.message.includes(`'${mqttDevice}'`) || log.message.includes(`\"${mqttDevice}\"`))
             && changed.some(day => log.message.includes(`schedule_${day}`))) rejection = log.message;
         } catch { /* Not a Zigbee2MQTT log record. */ }
       });
@@ -119,8 +119,8 @@ export class SaveCoordinator {
       const abort = () => { cleanup(); reject(new Error('Save cancelled. Edits were preserved.')); };
       const timer = setTimeout(() => { cleanup(); reject(new Error('Home Assistant request timed out. Check connectivity before retrying.')); }, 5_000);
       signal.addEventListener('abort', abort, { once: true });
-      if (signal.aborted) { abort(); return; }
       promise.then(value => { cleanup(); resolve(value); }, error => { cleanup(); reject(error); });
+      if (signal.aborted) abort();
     });
   }
 }

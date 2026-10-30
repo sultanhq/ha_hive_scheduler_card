@@ -18,6 +18,7 @@ export class HiveSchedulerCardEditor extends LitElement {
   @property({ attribute: false }) public hass!: HomeAssistant;
   @state() private _config!: HiveSchedulerCardConfig;
   @state() private _entityPickerAvailable = true;
+  private readonly _climateDomains = ['climate'];
 
   /**
    * Set configuration
@@ -47,8 +48,11 @@ export class HiveSchedulerCardEditor extends LitElement {
    * Handle entity picker change
    */
   private _entityChanged(e: Event): void {
+    e.stopPropagation();
     const target = e.target as HTMLElement;
-    const value = (target as any).value;
+    const value = (e as CustomEvent).detail?.value ?? (target as any).value;
+
+    if (typeof value !== 'string') return;
 
     if (value === this._config.entity) {
       return;
@@ -58,6 +62,7 @@ export class HiveSchedulerCardEditor extends LitElement {
       ...this._config,
       entity: value,
     };
+    delete this._config.mqtt_device;
 
     this._configChanged();
   }
@@ -97,14 +102,6 @@ export class HiveSchedulerCardEditor extends LitElement {
       view_mode: value,
     };
 
-    this._configChanged();
-  }
-
-  /**
-   * Handle schedule sensor input change
-   */
-  private _mqttChanged(e: Event): void {
-    this._config = { ...this._config, mqtt_device: (e.target as HTMLInputElement).value };
     this._configChanged();
   }
 
@@ -156,7 +153,7 @@ export class HiveSchedulerCardEditor extends LitElement {
         <ha-entity-picker
           .hass=${this.hass}
           .value=${this._config.entity}
-          .includeDomains=${['climate']}
+          .includeDomains=${this._climateDomains}
           @value-changed=${this._entityChanged}
           allow-custom-entity
         ></ha-entity-picker>
@@ -223,7 +220,7 @@ export class HiveSchedulerCardEditor extends LitElement {
           </label>
           ${this._renderEntityPicker()}
           <div class="editor-description">
-            Select the Hive SLR1c climate entity to manage
+            Select the Hive SLR1c climate entity. The Zigbee2MQTT receiver is discovered automatically.
           </div>
         </div>
 
@@ -263,11 +260,6 @@ export class HiveSchedulerCardEditor extends LitElement {
           </div>
         </div>
 
-        <div class="editor-row">
-          <label class="editor-label">Zigbee2MQTT friendly name (required)</label>
-          <input class="editor-input" .value=${this._config.mqtt_device || ''} @input=${this._mqttChanged} placeholder="Hive Reciever" />
-          <div class="editor-description">Use the exact device name, including spaces.</div>
-        </div>
         <details>
           <summary>Schedule entity overrides (optional)</summary>
           <div class="editor-description">Automatically discovered on the climate device. Set overrides for renamed or ambiguous entities.</div>

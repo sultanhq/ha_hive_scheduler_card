@@ -9,6 +9,7 @@ import { HomeAssistant, HiveSchedulerCardConfig, WeeklySchedule, DayOfWeek, Sche
 import { getScheduleFromSensor, resolveScheduleEntities, SaveCoordinator, getEntityInfo } from './services/ha-service';
 import { copyDaySchedule, serializeDaySchedule } from './models/schedule';
 import { validateMqttDevice } from './services/mqtt-sanitizer';
+import { resolveMqttDevice } from './services/mqtt-device.js';
 import { validateWeeklySchedule } from './utils/validation';
 import { cardStyles } from './styles/card-styles';
 
@@ -29,7 +30,7 @@ export class HiveSchedulerCard extends LitElement {
   }
 
   public static getStubConfig() {
-    return { entity: '', mqtt_device: '' };
+    return { entity: '' };
   }
 
   // Public properties (set by Home Assistant)
@@ -88,7 +89,7 @@ export class HiveSchedulerCard extends LitElement {
    */
   public setConfig(config: HiveSchedulerCardConfig): void {
     if (!config.entity || !/^climate\.[a-z0-9_]+$/.test(config.entity)) throw new Error('You must specify a climate entity');
-    validateMqttDevice(config.mqtt_device);
+    if (config.mqtt_device) validateMqttDevice(config.mqtt_device);
     if (config.view_mode && !['week', 'graph'].includes(config.view_mode)) throw new Error('view_mode must be week or graph');
     this._generation++;
     this._coordinator.cancel();
@@ -183,17 +184,23 @@ export class HiveSchedulerCard extends LitElement {
 
   private async _reloadSchedule(): Promise<void> {
     if (this._saving) return;
+    const generation = this._generation;
     this._schedule = this._originalSchedule = null;
     this._conflicts = [];
     this._error = this._message = null;
     this._hasUnsavedChanges = false;
     await this._loadSchedule();
+    if (generation !== this._generation || !this.isConnected) return;
     try {
+      const mqttDevice = await resolveMqttDevice(this.hass, this.config);
+      if (generation !== this._generation || !this.isConnected) return;
       await this.hass.callService('mqtt', 'publish', {
-        topic: `zigbee2mqtt/${this.config.mqtt_device}/get`,
+        topic: `zigbee2mqtt/${mqttDevice}/get`,
         payload: JSON.stringify(Object.fromEntries(DAYS_OF_WEEK.map(day => [`schedule_${day}`, '']))), retain: false
       });
-    } catch { this._error = 'Could not request receiver schedules. Check the MQTT integration and permissions.'; }
+    } catch (error) {
+      if (generation === this._generation) this._error = `Could not request receiver schedules: ${error instanceof Error ? error.message : String(error)}`;
+    }
   }
 
   /**
