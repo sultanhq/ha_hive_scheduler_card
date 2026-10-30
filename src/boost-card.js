@@ -16,6 +16,48 @@
     const temperature = Number(value);
     return Number.isFinite(temperature) ? temperature : null;
   };
+
+  // Never derive MQTT topics from the climate friendly_name or entity ID.
+  // MQTT/device/debug_info identifies the exact advertised receiver state topic.
+  const resolveDevice = async (hass, entity, override) => {
+    if (override) {
+      if (!validDevice(override)) throw new Error('Invalid MQTT topic override.');
+      return override;
+    }
+    if (!hass?.user?.is_admin || !hass?.callWS)
+      throw new Error('Sign in as an administrator or set the exact MQTT topic override.');
+    const registry = await hass.callWS({type:'config/entity_registry/list'});
+    const deviceId = registry.find(entry => entry.entity_id === entity)?.device_id;
+    if (!deviceId) throw new Error('Climate entity has no discoverable MQTT device. Set the MQTT topic override.');
+    const info = await hass.callWS({type:'mqtt/device/debug_info',device_id:deviceId});
+    const matches = new Set();
+    const add = topic => {
+      if (typeof topic !== 'string') return;
+      const found = /^zigbee2mqtt\/([^/+#\x00-\x1f\x7f]+)$/.exec(topic);
+      if (found) matches.add(found[1]);
+    };
+    for (const item of info?.entities || []) {
+      if (item.entity_id !== entity) continue;
+      for (const sub of item.subscriptions || []) add(sub.topic);
+      let payload = item.discovery_data?.payload;
+      if (typeof payload === 'string') {
+        try { payload = JSON.parse(payload); } catch { payload = null; }
+      }
+      if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+        const base = typeof payload['~'] === 'string' ? payload['~'] : '';
+        for (const key of ['state_topic','stat_t']) {
+          if (typeof payload[key] === 'string') add(payload[key].replace(/^~/,base));
+        }
+      }
+    }
+    if (matches.size !== 1) throw new Error(matches.size
+      ? 'Multiple receiver topics found. Set the exact MQTT topic override.'
+      : 'No receiver state topic found. Set the exact MQTT topic override.');
+    const name = [...matches][0];
+    if (!validDevice(name)) throw new Error('Discovered MQTT topic is invalid. Set the exact override.');
+    return name;
+  };
+
   const holdEnabled = (v) => v === true || v === 1 || v === 'true' || v === '1';
   const holdDisabled = (v) => v === false || v === 0 || v === 'false' || v === '0';
   const styles = `
@@ -77,7 +119,8 @@
     get hass() { return this._hass; }
     setConfig(config) {
       if (!validEntity(config.entity)) throw new Error('Select a valid climate entity.');
-      if (!validDevice(config.mqtt_device)) throw new Error('Provide the exact Zigbee2MQTT friendly name (no /, +, # or control characters).');
+      if (config.mqtt_device && !validDevice(config.mqtt_device)) throw new Error('Invalid Zigbee2MQTT topic name override.');
+      if (this._config && JSON.stringify(this._config) === JSON.stringify(config)) return;
       if (config.default_temperature !== undefined && !validTemp(Number(config.default_temperature))) throw new Error('Default temperature must be 5–32°C in 0.5°C steps.');
       if (config.default_duration !== undefined && !validDuration(Number(config.default_duration))) throw new Error('Default duration must be 15–360 minutes.');
       this._resetSubscription();
@@ -105,7 +148,7 @@
       }
     }
     static getConfigElement() { return document.createElement('hive-boost-card-editor'); }
-    static getStubConfig() { return { entity:'', mqtt_device:'' }; }
+    static getStubConfig() { return { entity:'' }; }
     getCardSize() { return 3; }
     connectedCallback() { this._ensureSubscription(); this._render(); }
     disconnectedCallback() {
@@ -121,12 +164,16 @@
     async _ensureSubscription() {
       if (!this._hass?.user?.is_admin) { this._resetSubscription(); return; }
       if (!this.isConnected || !this._config || !this._hass?.connection?.subscribeMessage) return;
-      const key = this._config.mqtt_device;
-      if (this._subKey === key || this._subscribing) return;
+      if (this._subscribing || this._subKey) return;
       this._resetSubscription();
       const generation = this._generation;
       this._subscribing = true;
       try {
+        const key = await Promise.race([
+          resolveDevice(this._hass, this._config.entity, this._config.mqtt_device),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('MQTT topic discovery timed out. Use the topic override.')), 5000))
+        ]);
+        if (generation !== this._generation || !this.isConnected) return;
         const topic = `${BASE}/${key}`;
         const unsub = await this._hass.connection.subscribeMessage(
           message => {
@@ -151,7 +198,7 @@
       if (!this._config || !this._hass?.user?.is_admin) return;
       try {
         await this._hass.callService('mqtt','publish',{
-          topic:`${BASE}/${this._config.mqtt_device}/get`,
+          topic:`${BASE}/${this._subKey}/get`,
           payload:JSON.stringify({
             occupied_heating_setpoint:'',temperature_setpoint_hold:'',temperature_setpoint_hold_duration:'',system_mode:''
           }),
@@ -226,7 +273,7 @@
       this._render();
       try {
         await this._hass.callService('mqtt','publish',{
-          topic:`${BASE}/${this._config.mqtt_device}/set`,
+          topic:`${BASE}/${this._subKey}/set`,
           payload:JSON.stringify(payload),
           retain:false
         });
@@ -264,7 +311,7 @@
       }
       const climate = this._hass?.states?.[this._config?.entity];
       const enabled = !!this._config && !!climate && !['unknown','unavailable'].includes(climate.state)
-        && !!this._hass?.user?.is_admin && this._subKey === this._config.mqtt_device && !this._working;
+        && !!this._hass?.user?.is_admin && !!this._subKey && !this._working;
       const hold = this._data && Object.prototype.hasOwnProperty.call(this._data,'temperature_setpoint_hold')
         ? holdEnabled(this._data.temperature_setpoint_hold) : null;
       const reportedDuration = Number(this._data?.temperature_setpoint_hold_duration);
@@ -288,7 +335,7 @@
         ? `Room temperature: ${current.toFixed(1)}°C` : 'Room temperature unavailable';
       const body = root.querySelector('#body');
       if (!this._config) {
-        body.textContent = 'Configure a climate entity and the Zigbee2MQTT receiver friendly name.';
+        body.textContent = 'Configure a climate entity ID. The receiver MQTT topic will be discovered automatically.';
       } else if (this._confirm) {
         body.innerHTML = `<div class="summary" id="summary"></div><div class="actions">
           <button id="back">Back</button><button class="primary" id="confirm" ${enabled ? '' : 'disabled'}>Confirm Boost</button></div>`;
@@ -372,10 +419,18 @@
       this._config = {type:this._configType,entity:'',mqtt_device:''};
       this._hass = null;
     }
-    set hass(hass) { this._hass = hass; this._render(); }
+    set hass(hass) {
+      this._hass = hass;
+      const ids = Object.keys(hass?.states || {}).filter(id => id.startsWith('climate.')).sort().join('|');
+      if (ids !== this._entityIds) { this._entityIds = ids; this._render(); }
+    }
     get hass() { return this._hass; }
     get _configType() { return 'custom:hive-boost-card'; }
-    setConfig(config) { this._config = {...config,type:this._configType}; this._render(); }
+    setConfig(config) {
+      const next = {...config,type:this._configType};
+      if (JSON.stringify(this._config) === JSON.stringify(next)) return;
+      this._config = next; this._render();
+    }
     _changed(key,value) {
       this._config = {...this._config,[key]:value};
       this.dispatchEvent(new CustomEvent('config-changed',{
@@ -392,9 +447,9 @@
         select,input {box-sizing:border-box;width:100%;padding:10px;font:inherit;border:1px solid var(--divider-color,#aaa);border-radius:7px;background:var(--card-background-color,#fff);color:var(--primary-text-color,#222)}
         small {color:var(--secondary-text-color,#777)}
       </style>
-      <label for="entity">Climate entity</label><select id="entity"></select>
-      <label for="mqtt">Zigbee2MQTT friendly name</label><input id="mqtt" placeholder="Hive Reciever">
-      <small>Use the exact receiver name, including spaces and spelling.</small>
+      <label for="entity">Climate entity ID (required)</label><select id="entity"></select>
+      <label for="mqtt">Zigbee2MQTT topic name (optional override)</label><input id="mqtt" placeholder="Auto-discover from climate entity">
+      <small>Automatically discovered from MQTT metadata. Enter an exact topic name only if discovery fails.</small>
       <label for="name">Name (optional)</label><input id="name" placeholder="Hive Boost">
       <label for="temp">Fallback temperature when room temperature is unavailable (5–32°C)</label><input id="temp" type="number" step=".5" min="5" max="32">
       <label for="duration">Default duration in minutes (15–360)</label><input id="duration" type="number" min="${MIN_DURATION}" max="360">`;
@@ -403,8 +458,7 @@
       const all = new Set([this._config.entity,...entities].filter(Boolean));
       select.appendChild(new Option('Select climate entity',''));
       for (const id of all) {
-        const text = this._hass?.states?.[id]?.attributes?.friendly_name || id;
-        select.appendChild(new Option(text,id));
+        select.appendChild(new Option(id,id));
       }
       select.value = this._config.entity || '';
       select.addEventListener('change',e=>this._changed('entity',e.target.value));
@@ -417,7 +471,10 @@
   }
   class HiveBoostBadge extends HiveBoostCard {
     static getConfigElement() { return document.createElement('hive-boost-badge-editor'); }
-    setConfig(config) { this._closeControls(false); super.setConfig(config); }
+    setConfig(config) {
+      if (this._config && JSON.stringify(this._config) === JSON.stringify(config)) return;
+      this._closeControls(false); super.setConfig(config);
+    }
     disconnectedCallback() { this._closeControls(false); super.disconnectedCallback(); }
     _getContentRoot() { return this.shadowRoot?.querySelector('#boost-controls'); }
     _ensureBadge() {
