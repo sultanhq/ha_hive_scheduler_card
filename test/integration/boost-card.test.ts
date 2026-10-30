@@ -140,7 +140,7 @@ describe('Hive Boost Card in same HACS resource', () => {
     const slider = card.shadowRoot.querySelector('#temperature');
     slider.value = '25'; slider.dispatchEvent(new Event('input'));
     hass.states['climate.hive_reciever'].attributes.current_temperature = 21.5;
-    card.setConfig({entity:'climate.hive_reciever',mqtt_device:'Hive Reciever'});
+    card.setConfig({type:'custom:hive-boost-card',entity:'climate.hive_reciever',mqtt_device:'Hive Reciever',default_temperature:21,default_duration:60});
     expect(card.shadowRoot.querySelector('#temperature').value).toBe('25');
   });
 

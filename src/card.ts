@@ -323,6 +323,8 @@ export class HiveSchedulerCard extends LitElement {
     this._error = this._message = null;
     try {
       const mqttDevice = await this._getMqttDevice();
+      // Discovery is asynchronous: a disconnected/reconfigured card must never publish.
+      if (generation !== this._generation || !this.isConnected) return;
       const result = await this._coordinator.save(this._latestHass || this.hass, { ...this.config, mqtt_device: mqttDevice }, this._entities, this._originalSchedule, pending);
       if (generation !== this._generation) return;
       if (result.status !== 'skipped') {

@@ -398,18 +398,15 @@ describe('Editor Component', () => {
       }
     });
 
-    it('should provide fallback input when no entities available', async () => {
+    it('preserves a configured ID even when the entity is temporarily unavailable', async () => {
+      // Arrange - the configured entity is missing from the current HA snapshot.
       const hass = createMockHass({ states: {} });
       const editor = await createEditor({}, hass);
-
-      // Should show text input for manual entry
-      const manualInput = querySelector<HTMLInputElement>(editor, 'input[type="text"]');
-      const hasPlaceholder = manualInput?.placeholder?.includes('climate');
-
-      expect(manualInput).toBeDefined();
-      if (manualInput) {
-        expect(hasPlaceholder).toBe(true);
-      }
+      // Act - render the editor while that entity is unavailable.
+      const entitySelect = querySelector<HTMLSelectElement>(editor, '.editor-select');
+      // Assert - the stable ID remains selected rather than resetting the form.
+      expect(entitySelect?.value).toBe('climate.living_room_hive');
+      expect(Array.from(entitySelect?.options || []).some(o => o.textContent?.trim() === 'climate.living_room_hive')).toBe(true);
     });
   });
 
