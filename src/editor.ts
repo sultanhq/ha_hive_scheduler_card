@@ -17,7 +17,7 @@ export class HiveSchedulerCardEditor extends LitElement {
 
   @property({ attribute: false }) public hass!: HomeAssistant;
   @state() private _config!: HiveSchedulerCardConfig;
-  @state() private _entityPickerAvailable = true;
+
 
   /**
    * Set configuration
@@ -69,7 +69,7 @@ export class HiveSchedulerCardEditor extends LitElement {
     const target = e.target as HTMLInputElement;
     const value = target.value;
 
-    if (value === this._config.name) {
+    if (value === (this._config.name || '')) {
       return;
     }
 
@@ -104,13 +104,16 @@ export class HiveSchedulerCardEditor extends LitElement {
    * Handle schedule sensor input change
    */
   private _mqttChanged(e: Event): void {
-    this._config = { ...this._config, mqtt_device: (e.target as HTMLInputElement).value };
+    const value = (e.target as HTMLInputElement).value;
+    if (value === (this._config.mqtt_device || '')) return;
+    this._config = { ...this._config, mqtt_device: value || undefined };
     this._configChanged();
   }
 
   private _scheduleEntityChanged(day: DayOfWeek, e: Event): void {
     const entities = { ...this._config.schedule_entities };
     const value = (e.target as HTMLInputElement).value;
+    if (value === (this._config.schedule_entities?.[day] || '')) return;
     if (value) entities[day] = value; else delete entities[day];
     this._config = { ...this._config, schedule_entities: entities };
     this._configChanged();
@@ -124,91 +127,22 @@ export class HiveSchedulerCardEditor extends LitElement {
     this._entityChanged(e);
   }
 
-  /**
-   * Get all climate entities
-   * Used for fallback entity picker
-   */
-  private _getClimateEntities(): Array<{ id: string; name: string }> {
-    if (!this.hass) {
-      return [];
-    }
-
-    return Object.keys(this.hass.states)
-      .filter((entityId) => entityId.startsWith('climate.'))
-      .map((entityId) => {
-        const state = this.hass.states[entityId];
-        const friendlyName = state.attributes.friendly_name;
-        return {
-          id: entityId,
-          name: (typeof friendlyName === 'string' ? friendlyName : entityId) as string,
-        };
-      })
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }
-
-  /**
-   * Render entity picker (with fallback)
-   */
+  /** Display stable entity IDs instead of changing Home Assistant friendly names. */
   private _renderEntityPicker(): TemplateResult {
-    // Try to use ha-entity-picker if available
-    if (this._entityPickerAvailable) {
-      return html`
-        <ha-entity-picker
-          .hass=${this.hass}
-          .value=${this._config.entity}
-          .includeDomains=${['climate']}
-          @value-changed=${this._entityChanged}
-          allow-custom-entity
-        ></ha-entity-picker>
-      `;
+    const available = Object.keys(this.hass?.states || {}).filter(id => id.startsWith('climate.'));
+    const all = [...new Set([this._config.entity, ...available].filter(Boolean))].sort();
+    if (!all.length) {
+      return html`<input type="text" class="editor-input"
+        .value=${this._config.entity || ''} @change=${this._entityChanged}
+        placeholder="climate.your_hive" />
+        <div class="editor-description">Enter the climate entity ID.</div>`;
     }
-
-    // Fallback to standard select
-    const climateEntities = this._getClimateEntities();
-
-    if (climateEntities.length === 0) {
-      return html`
-        <input
-          type="text"
-          class="editor-input"
-          .value=${this._config.entity || ''}
-          @input=${this._entityChanged}
-          placeholder="climate.your_hive"
-        />
-        <div class="editor-description">
-          No climate entities found. Enter the entity ID manually.
-        </div>
-      `;
-    }
-
-    return html`
-      <select
-        class="editor-select"
-        .value=${this._config.entity || ''}
-        @change=${this._entitySelectChanged}
-      >
-        <option value="">Select an entity...</option>
-        ${climateEntities.map(
-          (entity) => html`
-            <option value=${entity.id} ?selected=${entity.id === this._config.entity}>
-              ${entity.name}
-            </option>
-          `
-        )}
-      </select>
-    `;
+    return html`<select class="editor-select" .value=${this._config.entity || ''}
+      @change=${this._entitySelectChanged}>
+      <option value="">Select climate entity ID...</option>
+      ${all.map(id => html`<option value=${id}>${id}</option>`)}
+    </select>`;
   }
-
-  /**
-   * Handle entity picker error (fallback to select)
-   */
-  protected firstUpdated(): void {
-    // Check if ha-entity-picker is available
-    if (!customElements.get('ha-entity-picker')) {
-      this._entityPickerAvailable = false;
-    }
-  }
-
   protected render(): TemplateResult {
     if (!this.hass || !this._config) {
       return html``;
@@ -219,11 +153,11 @@ export class HiveSchedulerCardEditor extends LitElement {
         <!-- Entity Picker -->
         <div class="editor-row">
           <label class="editor-label">
-            Entity
+            Climate entity ID (required)
           </label>
           ${this._renderEntityPicker()}
           <div class="editor-description">
-            Select the Hive SLR1c climate entity to manage
+            Select the stable Home Assistant entity ID; changing friendly names are ignored.
           </div>
         </div>
 
@@ -236,7 +170,7 @@ export class HiveSchedulerCardEditor extends LitElement {
             type="text"
             class="editor-input"
             .value=${this._config.name || ''}
-            @input=${this._nameChanged}
+            @change=${this._nameChanged}
             placeholder="Living Room Heating"
           />
           <div class="editor-description">
@@ -264,9 +198,9 @@ export class HiveSchedulerCardEditor extends LitElement {
         </div>
 
         <div class="editor-row">
-          <label class="editor-label">Zigbee2MQTT friendly name (required)</label>
-          <input class="editor-input" .value=${this._config.mqtt_device || ''} @input=${this._mqttChanged} placeholder="Hive Reciever" />
-          <div class="editor-description">Use the exact device name, including spaces.</div>
+          <label class="editor-label">Zigbee2MQTT topic name (optional override)</label>
+          <input class="editor-input" .value=${this._config.mqtt_device || ''} @change=${this._mqttChanged} placeholder="Hive Reciever" />
+          <div class="editor-description">Automatically discovered from the selected climate entity’s MQTT state topic. Only enter the exact Zigbee2MQTT topic name if discovery fails.</div>
         </div>
         <details>
           <summary>Schedule entity overrides (optional)</summary>
@@ -274,7 +208,7 @@ export class HiveSchedulerCardEditor extends LitElement {
           ${DAYS_OF_WEEK.map(day => html`<div class="editor-row">
             <label class="editor-label">${day}</label>
             <input class="editor-input" .value=${this._config.schedule_entities?.[day] || ''}
-              @input=${(e: Event) => this._scheduleEntityChanged(day, e)} placeholder=${`text.hive_schedule_${day}`} />
+              @change=${(e: Event) => this._scheduleEntityChanged(day, e)} placeholder=${`text.hive_schedule_${day}`} />
           </div>`)}
         </details>
       </div>

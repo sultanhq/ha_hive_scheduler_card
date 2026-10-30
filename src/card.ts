@@ -6,7 +6,7 @@
 import { LitElement, html, PropertyValues } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { HomeAssistant, HiveSchedulerCardConfig, WeeklySchedule, DayOfWeek, ScheduleEntities, DaySchedule, DAYS_OF_WEEK } from './models/types';
-import { getScheduleFromSensor, resolveScheduleEntities, SaveCoordinator, getEntityInfo } from './services/ha-service';
+import { getScheduleFromSensor, resolveScheduleEntities, resolveMqttDevice, SaveCoordinator, getEntityInfo } from './services/ha-service';
 import { copyDaySchedule, serializeDaySchedule } from './models/schedule';
 import { validateMqttDevice } from './services/mqtt-sanitizer';
 import { validateWeeklySchedule } from './utils/validation';
@@ -29,7 +29,7 @@ export class HiveSchedulerCard extends LitElement {
   }
 
   public static getStubConfig() {
-    return { entity: '', mqtt_device: '' };
+    return { entity: '' };
   }
 
   // Public properties (set by Home Assistant)
@@ -58,6 +58,7 @@ export class HiveSchedulerCard extends LitElement {
   private _receiverSignature = '';
   private _coordinator = new SaveCoordinator();
   private _latestHass?: HomeAssistant;
+  private _resolvedDevice: string | null = null;
 
   private _sameDay(a: DaySchedule, b: DaySchedule): boolean {
     try { return serializeDaySchedule(a) === serializeDaySchedule(b); }
@@ -88,7 +89,15 @@ export class HiveSchedulerCard extends LitElement {
    */
   public setConfig(config: HiveSchedulerCardConfig): void {
     if (!config.entity || !/^climate\.[a-z0-9_]+$/.test(config.entity)) throw new Error('You must specify a climate entity');
-    validateMqttDevice(config.mqtt_device);
+    if (config.mqtt_device) validateMqttDevice(config.mqtt_device);
+    // HA may reapply the same configuration during live state updates. Never
+    // discard a schedule draft, active editor or in-flight save in that case.
+    if (this.config && JSON.stringify([this.config.entity, this.config.mqtt_device || '', this.config.schedule_entities || {}]) ===
+      JSON.stringify([config.entity, config.mqtt_device || '', config.schedule_entities || {}])) {
+      this.config = { ...config, schedule_entities: { ...config.schedule_entities }, view_mode: config.view_mode || 'week' };
+      return;
+    }
+    this._resolvedDevice = null;
     if (config.view_mode && !['week', 'graph'].includes(config.view_mode)) throw new Error('view_mode must be week or graph');
     this._generation++;
     this._coordinator.cancel();
@@ -181,8 +190,30 @@ export class HiveSchedulerCard extends LitElement {
     }
   }
 
+  /** Discover and cache the actual Zigbee2MQTT topic segment before any publish. */
+  private async _getMqttDevice(): Promise<string> {
+    if (this.config.mqtt_device) return this.config.mqtt_device;
+    if (this._resolvedDevice) return this._resolvedDevice;
+    const generation = this._generation;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const name = await Promise.race([
+        resolveMqttDevice(this.hass, this.config),
+        new Promise<never>((_, reject) => {
+          timeout = setTimeout(() => reject(new Error('MQTT topic discovery timed out. Set mqtt_device explicitly.')), 5000);
+        })
+      ]);
+      if (generation !== this._generation) throw new Error('Card configuration changed while identifying the receiver.');
+      this._resolvedDevice = name;
+      return name;
+    } finally { clearTimeout(timeout); }
+  }
+
   private async _reloadSchedule(): Promise<void> {
     if (this._saving) return;
+    let mqttDevice: string;
+    try { mqttDevice = await this._getMqttDevice(); }
+    catch (error) { this._error = error instanceof Error ? error.message : String(error); return; }
     this._schedule = this._originalSchedule = null;
     this._conflicts = [];
     this._error = this._message = null;
@@ -190,7 +221,7 @@ export class HiveSchedulerCard extends LitElement {
     await this._loadSchedule();
     try {
       await this.hass.callService('mqtt', 'publish', {
-        topic: `zigbee2mqtt/${this.config.mqtt_device}/get`,
+        topic: `zigbee2mqtt/${mqttDevice}/get`,
         payload: JSON.stringify(Object.fromEntries(DAYS_OF_WEEK.map(day => [`schedule_${day}`, '']))), retain: false
       });
     } catch { this._error = 'Could not request receiver schedules. Check the MQTT integration and permissions.'; }
@@ -291,7 +322,8 @@ export class HiveSchedulerCard extends LitElement {
     this._showCopyDialog = false;
     this._error = this._message = null;
     try {
-      const result = await this._coordinator.save(this._latestHass || this.hass, this.config, this._entities, this._originalSchedule, pending);
+      const mqttDevice = await this._getMqttDevice();
+      const result = await this._coordinator.save(this._latestHass || this.hass, { ...this.config, mqtt_device: mqttDevice }, this._entities, this._originalSchedule, pending);
       if (generation !== this._generation) return;
       if (result.status !== 'skipped') {
         const baseline = this._deepCopySchedule(this._originalSchedule);
@@ -301,6 +333,8 @@ export class HiveSchedulerCard extends LitElement {
       if (result.status === 'error') this._error = result.error;
       else this._message = result.status === 'success' ? 'Saved and verified with Hive receiver.' : 'No schedule changes to save.';
       this._updateDirty();
+    } catch (error) {
+      if (generation === this._generation) this._error = error instanceof Error ? error.message : String(error);
     } finally {
       if (generation === this._generation) { this._saving = false; await this._loadSchedule(); }
     }
