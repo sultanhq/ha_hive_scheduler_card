@@ -140,7 +140,7 @@ export class HiveSchedulerCardEditor extends LitElement {
     return html`<select class="editor-select" .value=${this._config.entity || ''}
       @change=${this._entitySelectChanged}>
       <option value="">Select climate entity ID...</option>
-      ${all.map(id => html`<option value=${id}>${id}</option>`)}
+      ${all.map(id => html`<option value=${id} ?selected=${id === this._config.entity}>${id}</option>`)}
     </select>`;
   }
   protected render(): TemplateResult {
