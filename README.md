@@ -43,6 +43,8 @@ name: Hive Heating
 view_mode: week              # week (default) or graph
 ```
 
+The visual editor keeps text entry stable during live Home Assistant updates and commits text fields when you finish editing (on change), rather than on every keystroke.
+
 `entity` (the stable `climate.*` entity ID) is required. `mqtt_device` is an **optional override**: the card discovers the exact receiver MQTT state topic from Home Assistant MQTT device metadata, never by guessing from changing friendly-name labels. Discovery requires an administrator; if discovery is unavailable or ambiguous, supply the exact Zigbee2MQTT topic name as `mqtt_device`. Wildcards, `/`, and control characters are rejected. `name` only controls the card title.
 
 Schedule text entities are discovered through the climate entity's HA device and MQTT schedule identifiers. Renamed entities work independently of the climate entity ID. If discovery is missing or ambiguous, configure overrides in YAML or the visual editor:
