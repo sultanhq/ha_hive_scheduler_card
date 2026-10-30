@@ -18,6 +18,63 @@ async function mount(view: 'week' | 'graph' = 'week') {
 afterEach(() => document.body.replaceChildren());
 
 describe('Hive UI regressions', () => {
+  it('applies a changed default view without losing unsaved schedule edits', async () => {
+    // Arrange - make an unsaved change to Monday's receiver schedule.
+    const { card, scenario, week, root } = await mount();
+    event(week, 'day-selected', { day: 'monday' }); await tick(card);
+    event(root.querySelector('hive-day-schedule-editor')!, 'schedule-changed', {
+      day: 'monday', schedule: { transitions: [{ time: '06:07', temperature: 21 }] }
+    }); await tick(card);
+    const generation = (card as any)._generation;
+    expect((card as any)._hasUnsavedChanges).toBe(true);
+
+    // Act - change only the configured default view via the visual editor.
+    card.setConfig({
+      type: 'custom:hive-scheduler-card', entity: scenario.entityId,
+      mqtt_device: 'Hive Reciever', view_mode: 'graph'
+    });
+    await tick(card);
+
+    // Assert - the graph appears immediately and the unsaved draft survives.
+    expect((card as any)._viewMode).toBe('graph');
+    expect(root.querySelector('hive-schedule-graph-view')).toBeTruthy();
+    expect(root.querySelector('hive-schedule-week-view')).toBeNull();
+    expect((card as any)._schedule.monday.transitions[0].temperature).toBe(21);
+    expect((card as any)._hasUnsavedChanges).toBe(true);
+    expect((card as any)._generation).toBe(generation);
+  });
+
+  it('does not revert manual view toggles when HA reapplies the same config', async () => {
+    // Arrange - configure graph mode and then switch the displayed view manually.
+    const { card, scenario, root } = await mount('graph');
+    (root.querySelector('.button-icon') as HTMLButtonElement).click(); await tick(card);
+    expect((card as any)._viewMode).toBe('week');
+
+    // Act - simulate HA reapplying an unchanged saved configuration.
+    card.setConfig({
+      type: 'custom:hive-scheduler-card', entity: scenario.entityId,
+      mqtt_device: 'Hive Reciever', view_mode: 'graph'
+    });
+    await tick(card);
+
+    // Assert - the user's manual choice is retained.
+    expect((card as any)._viewMode).toBe('week');
+    expect(root.querySelector('hive-schedule-week-view')).toBeTruthy();
+  });
+
+  it('validates view_mode even on a config update that preserves receiver state', async () => {
+    // Arrange - initialise the receiver with an existing config.
+    const { card, scenario } = await mount();
+    const generation = (card as any)._generation;
+
+    // Act & Assert - reject an invalid default without modifying receiver state.
+    expect(() => card.setConfig({
+      type: 'custom:hive-scheduler-card', entity: scenario.entityId,
+      mqtt_device: 'Hive Reciever', view_mode: 'invalid' as 'week'
+    })).toThrow('view_mode');
+    expect((card as any)._viewMode).toBe('week');
+    expect((card as any)._generation).toBe(generation);
+  });
   it('displays seven native days without inserting midnight or keeping padding', async () => {
     const { card, week } = await mount();
     for (const day of DAYS_OF_WEEK) {
